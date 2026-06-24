@@ -1,0 +1,153 @@
+from collections import OrderedDict
+from datetime import date, datetime, time, timedelta
+from decimal import Decimal, InvalidOperation
+from zoneinfo import ZoneInfo
+
+from states.constants import PAYMENT_GROUPS
+
+
+def timezone(name):
+    return ZoneInfo(name or "Europe/Moscow")
+
+
+def now_in_timezone(tz_name):
+    return datetime.now(timezone(tz_name))
+
+
+def parse_amount(value):
+    if value is None:
+        return Decimal("0")
+    normalized = str(value).replace(" ", "").replace(",", ".")
+    try:
+        return Decimal(normalized)
+    except InvalidOperation:
+        return Decimal("0")
+
+
+def format_amount(value):
+    value = Decimal(value).quantize(Decimal("0.01"))
+    if value == value.to_integral():
+        return str(value.to_integral())
+    return str(value).rstrip("0").rstrip(".")
+
+
+def parse_expense_datetime(row, tz_name):
+    value = str(row.get("Дата и время", "")).strip()
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%d.%m.%Y %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            return datetime.strptime(value, fmt).replace(tzinfo=timezone(tz_name))
+        except ValueError:
+            pass
+    date_value = str(row.get("Дата", "")).strip()
+    try:
+        return datetime.strptime(date_value, "%Y-%m-%d").replace(tzinfo=timezone(tz_name))
+    except ValueError:
+        return None
+
+
+def payment_group(row):
+    payment_type = str(row.get("Тип оплаты", "")).strip()
+    crypto = str(row.get("Криптовалюта", "")).strip().upper()
+    if payment_type == "Крипта" and crypto:
+        return crypto
+    return payment_type
+
+
+def filter_rows(rows, start_dt, end_dt, tz_name, chat_id=None):
+    result = []
+    for row in rows:
+        if chat_id is not None and str(row.get("Chat ID", "")) != str(chat_id):
+            continue
+        row_dt = parse_expense_datetime(row, tz_name)
+        if row_dt and start_dt <= row_dt < end_dt:
+            result.append(row)
+    return result
+
+
+def summarize(rows):
+    groups = OrderedDict((group, Decimal("0")) for group in PAYMENT_GROUPS)
+    total = Decimal("0")
+    for row in rows:
+        amount = parse_amount(row.get("Сумма"))
+        group = payment_group(row)
+        if group not in groups:
+            groups[group] = Decimal("0")
+        groups[group] += amount
+        total += amount
+    return groups, total
+
+
+def report_text(title, rows):
+    groups, total = summarize(rows)
+    lines = [title, ""]
+    for group, amount in groups.items():
+        lines.append(f"{group}: {format_amount(amount)}")
+    lines.extend(["", f"Общий итог: {format_amount(total)}", f"Операций: {len(rows)}"])
+    return "\n".join(lines)
+
+
+def today_range(tz_name):
+    now = now_in_timezone(tz_name)
+    start = datetime.combine(now.date(), time.min, tzinfo=timezone(tz_name))
+    return start, start + timedelta(days=1)
+
+
+def last_7_days_range(tz_name):
+    end = now_in_timezone(tz_name)
+    return end - timedelta(days=7), end
+
+
+def current_month_range(tz_name):
+    now = now_in_timezone(tz_name)
+    start = datetime(now.year, now.month, 1, tzinfo=timezone(tz_name))
+    if now.month == 12:
+        end = datetime(now.year + 1, 1, 1, tzinfo=timezone(tz_name))
+    else:
+        end = datetime(now.year, now.month + 1, 1, tzinfo=timezone(tz_name))
+    return start, end
+
+
+def previous_month_range(tz_name):
+    current_start, _ = current_month_range(tz_name)
+    last_day_previous = current_start.date() - timedelta(days=1)
+    start = datetime(last_day_previous.year, last_day_previous.month, 1, tzinfo=timezone(tz_name))
+    return start, current_start
+
+
+def build_period_report(rows, title, start_dt, end_dt, tz_name, chat_id=None):
+    filtered = filter_rows(rows, start_dt, end_dt, tz_name, chat_id=chat_id)
+    period = f"{start_dt.strftime('%Y-%m-%d %H:%M')} - {end_dt.strftime('%Y-%m-%d %H:%M')} {tz_name}"
+    return report_text(f"{title}\n{period}", filtered)
+
+
+def history_text(rows, chat_id, limit=20):
+    own_rows = [row for row in rows if str(row.get("Chat ID", "")) == str(chat_id)]
+    if not own_rows:
+        return "История пуста."
+    recent = own_rows[-limit:]
+    lines = ["Последние операции:"]
+    for row in reversed(recent):
+        group = payment_group(row)
+        lines.append(
+            f"{row.get('Дата и время')} | {group} | {row.get('Категория')} | "
+            f"{row.get('Сумма')} | {row.get('Описание')}"
+        )
+    return "\n".join(lines)
+
+
+def format_expense_confirmation(data, tz_name, created_at):
+    lines = []
+    if data.get("payment_type") == "Крипта":
+        lines.append("Тип оплаты: Крипта")
+        lines.append(f"Валюта: {data.get('crypto_currency')}")
+    else:
+        lines.append(f"Способ оплаты: {data.get('payment_type')}")
+    lines.extend(
+        [
+            f"Категория: {data.get('category')}",
+            f"Сумма: {data.get('amount')}",
+            f"Описание: {data.get('description')}",
+            f"Дата и время: {created_at.strftime('%Y-%m-%d %H:%M:%S')} {tz_name}",
+        ]
+    )
+    return "\n".join(lines)

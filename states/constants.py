@@ -1,0 +1,25 @@
+STATE_PAYMENT_TYPE = "payment_type"
+STATE_CRYPTO_CURRENCY = "crypto_currency"
+STATE_AMOUNT = "amount"
+STATE_DESCRIPTION = "description"
+STATE_CATEGORY = "category"
+STATE_CONFIRM = "confirm"
+STATE_DELETE_CONFIRM = "delete_confirm"
+STATE_UNDO_SAVED = "undo_saved"
+
+PAYMENT_CASH = "Наличные"
+PAYMENT_CARD = "Безналичные"
+PAYMENT_CRYPTO = "Крипта"
+
+CRYPTO_CURRENCIES = ("BTC", "ETH", "USDT")
+
+CATEGORIES = (
+    "Подписки",
+    "Зарплата",
+    "Офис",
+    "Обучение",
+    "Маркетинг",
+    "Прочее",
+)
+
+PAYMENT_GROUPS = ("Наличные", "Безналичные", "BTC", "ETH", "USDT")
