@@ -60,7 +60,10 @@ def parse_amount(text):
         return None
     if value <= 0:
         return None
-    return str(value.normalize())
+    formatted = format(value, "f")
+    if "." in formatted:
+        formatted = formatted.rstrip("0").rstrip(".")
+    return formatted
 
 
 def row_number_from_append_result(result):
