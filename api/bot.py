@@ -41,6 +41,10 @@ def env_timezone():
     return os.environ.get("TIMEZONE", "Europe/Moscow")
 
 
+def admin_chat_id():
+    return os.environ.get("ADMIN_CHAT_ID", "").strip()
+
+
 def json_response(handler, status, payload):
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     handler.send_response(status)
@@ -142,6 +146,42 @@ def build_expense(data, chat_id):
         "Timezone": tz_name,
         "Кошелек": data.get("crypto_wallet", ""),
     }
+
+
+def expense_notification_text(expense, row_number=None):
+    lines = ["Создана новая оплата"]
+    if row_number:
+        lines.append(f"Строка: {row_number}")
+    lines.extend(
+        [
+            f"Дата и время: {expense.get('Дата и время')}",
+            f"Тип оплаты: {expense.get('Тип оплаты')}",
+        ]
+    )
+    if expense.get("Криптовалюта"):
+        lines.append(f"Криптовалюта: {expense.get('Криптовалюта')}")
+    if expense.get("Кошелек"):
+        lines.append(f"Кошелек: {expense.get('Кошелек')}")
+    lines.extend(
+        [
+            f"Категория: {expense.get('Категория')}",
+            f"Статус: {expense.get('Статус')}",
+            f"Сумма: {expense.get('Сумма')}",
+            f"Описание: {expense.get('Описание')}",
+            f"Chat ID: {expense.get('Chat ID')}",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def notify_admin_about_expense(telegram, expense, row_number=None):
+    admin_id = admin_chat_id()
+    if not admin_id:
+        return
+    try:
+        telegram.send_message(admin_id, expense_notification_text(expense, row_number=row_number))
+    except TelegramError as exc:
+        print(f"Admin notification failed: {exc}", flush=True)
 
 
 def handle_command(chat_id, command, telegram):
@@ -374,6 +414,7 @@ def handle_callback(callback, telegram):
             sheets.set_state(chat_id, STATE_UNDO_SAVED, {"row_number": row_number, "expense": expense})
         else:
             sheets.clear_state(chat_id)
+        notify_admin_about_expense(telegram, expense, row_number=row_number)
         telegram.edit_message_text(chat_id, message_id, "Запись сохранена в лист Expenses.", reply_markup=saved_keyboard())
         return
 
