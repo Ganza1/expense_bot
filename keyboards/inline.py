@@ -13,7 +13,8 @@ def main_menu_keyboard():
     return inline_keyboard(
         [
             [button("➕ Добавить расход", "cmd:add"), button("📊 Отчет", "cmd:report")],
-            [button("📜 История", "cmd:history"), button("ℹ Помощь", "cmd:help")],
+            [button("📜 История", "cmd:history"), button("🔁 Статус", "cmd:status")],
+            [button("ℹ Помощь", "cmd:help")],
         ]
     )
 
@@ -52,13 +53,29 @@ def category_keyboard():
     return inline_keyboard(rows)
 
 
-def status_keyboard():
+def status_keyboard(prefix="status"):
     emoji = {
         "Оплачен": "✅",
         "На рассмотрении": "⏳",
         "Отказ": "❌",
     }
-    rows = [[button(f"{emoji.get(status, '')} {status}".strip(), f"status:{status}")] for status in STATUSES]
+    rows = [[button(f"{emoji.get(status, '')} {status}".strip(), f"{prefix}:{status}")] for status in STATUSES]
+    rows.append([button("❌ Отмена", "flow:cancel")])
+    return inline_keyboard(rows)
+
+
+def status_records_keyboard(items):
+    rows = []
+    for index, item in enumerate(items, start=1):
+        record = item["record"]
+        date_time = record.get("Дата и время", "")
+        amount = record.get("Сумма", "")
+        description = record.get("Описание", "")
+        status = record.get("Статус", "") or "без статуса"
+        label = f"{index}. {date_time} | {amount} | {description} | {status}"
+        if len(label) > 60:
+            label = label[:57] + "..."
+        rows.append([button(label, f"status_row:{item['row_number']}")])
     rows.append([button("❌ Отмена", "flow:cancel")])
     return inline_keyboard(rows)
 

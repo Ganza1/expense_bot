@@ -6,6 +6,7 @@ STATE_CATEGORY = "category"
 STATE_STATUS = "status"
 STATE_CONFIRM = "confirm"
 STATE_DELETE_CONFIRM = "delete_confirm"
+STATE_STATUS_UPDATE = "status_update"
 STATE_UNDO_SAVED = "undo_saved"
 
 PAYMENT_CASH = "Наличные"

@@ -24,6 +24,8 @@ EXPENSE_HEADERS = [
 ]
 
 STATE_HEADERS = ["Chat ID", "State", "Data JSON", "Updated At"]
+CHAT_ID_INDEX = EXPENSE_HEADERS.index("Chat ID")
+STATUS_INDEX = EXPENSE_HEADERS.index("Статус")
 
 
 class SheetsError(RuntimeError):
@@ -92,6 +94,11 @@ def all_expenses():
     return get_expenses_sheet().get_all_records(expected_headers=EXPENSE_HEADERS)
 
 
+def _record_from_row(row):
+    padded = row + [""] * (len(EXPENSE_HEADERS) - len(row))
+    return dict(zip(EXPENSE_HEADERS, padded))
+
+
 def get_state(chat_id):
     worksheet = get_states_sheet()
     chat_id = str(chat_id)
@@ -131,10 +138,24 @@ def find_last_expense_row(chat_id):
     chat_id = str(chat_id)
     for index in range(len(rows), 1, -1):
         row = rows[index - 1]
-        if len(row) >= 9 and row[8] == chat_id:
-            record = dict(zip(EXPENSE_HEADERS, row))
+        if len(row) > CHAT_ID_INDEX and row[CHAT_ID_INDEX] == chat_id:
+            record = _record_from_row(row)
             return index, record
     return None, None
+
+
+def recent_expense_rows(chat_id, limit=10):
+    worksheet = get_expenses_sheet()
+    rows = worksheet.get_all_values()
+    chat_id = str(chat_id)
+    result = []
+    for index in range(len(rows), 1, -1):
+        row = rows[index - 1]
+        if len(row) > CHAT_ID_INDEX and row[CHAT_ID_INDEX] == chat_id:
+            result.append({"row_number": index, "record": _record_from_row(row)})
+            if len(result) >= limit:
+                break
+    return result
 
 
 def delete_expense_row(row_number):
@@ -146,8 +167,16 @@ def get_expense_row(row_number):
     row = worksheet.row_values(int(row_number))
     if not row:
         return None
-    padded = row + [""] * (len(EXPENSE_HEADERS) - len(row))
-    return dict(zip(EXPENSE_HEADERS, padded))
+    return _record_from_row(row)
+
+
+def update_expense_status(row_number, chat_id, status):
+    current = get_expense_row(row_number)
+    if not current or str(current.get("Chat ID", "")) != str(chat_id):
+        return False
+    worksheet = get_expenses_sheet()
+    worksheet.update_cell(int(row_number), STATUS_INDEX + 1, status)
+    return True
 
 
 def expense_matches(record, expected):

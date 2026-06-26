@@ -14,6 +14,7 @@ from keyboards.inline import (
     payment_keyboard,
     report_keyboard,
     saved_keyboard,
+    status_records_keyboard,
     status_keyboard,
 )
 from services import reports, sheets
@@ -30,6 +31,7 @@ from states.constants import (
     STATE_DESCRIPTION,
     STATE_PAYMENT_TYPE,
     STATE_STATUS,
+    STATE_STATUS_UPDATE,
     STATE_UNDO_SAVED,
 )
 
@@ -75,6 +77,19 @@ def start_add_flow(chat_id, telegram):
     telegram.send_message(chat_id, "Выберите способ оплаты:", reply_markup=payment_keyboard())
 
 
+def start_status_update_flow(chat_id, telegram):
+    items = sheets.recent_expense_rows(chat_id, limit=10)
+    if not items:
+        telegram.send_message(chat_id, "Нет операций для изменения статуса.")
+        return
+    sheets.clear_state(chat_id)
+    telegram.send_message(
+        chat_id,
+        "Выберите операцию для смены статуса:",
+        reply_markup=status_records_keyboard(items),
+    )
+
+
 def send_start(chat_id, telegram):
     telegram.send_message(
         chat_id,
@@ -94,6 +109,7 @@ def send_help(chat_id, telegram):
                 "/week - отчет за последние 7 дней",
                 "/month - отчет за текущий месяц",
                 "/history - последние 20 операций",
+                "/status - изменить статус одной из последних 10 операций",
                 "/delete_last - удалить последнюю запись",
                 "/time - текущее время Europe/Moscow",
                 "/id - показать chat_id",
@@ -153,6 +169,8 @@ def handle_command(chat_id, command, telegram):
         telegram.send_message(chat_id, reports.build_period_report(rows, "Отчет за текущий месяц", start, end, tz_name, chat_id))
     elif command == "/history":
         telegram.send_message(chat_id, reports.history_text(sheets.all_expenses(), chat_id))
+    elif command == "/status":
+        start_status_update_flow(chat_id, telegram)
     elif command == "/delete_last":
         row_number, record = sheets.find_last_expense_row(chat_id)
         if not row_number:
@@ -235,6 +253,8 @@ def handle_callback(callback, telegram):
             send_help(chat_id, telegram)
         elif command == "report":
             show_report_menu(chat_id, telegram)
+        elif command == "status":
+            start_status_update_flow(chat_id, telegram)
         return
 
     if data_value.startswith("report:"):
@@ -296,6 +316,35 @@ def handle_callback(callback, telegram):
             reports.format_expense_confirmation(data, tz_name, created_at),
             reply_markup=confirm_keyboard(),
         )
+        return
+
+    if data_value.startswith("status_row:"):
+        row_number = data_value.split(":", 1)[1]
+        record = sheets.get_expense_row(row_number)
+        if not record or str(record.get("Chat ID", "")) != str(chat_id):
+            sheets.clear_state(chat_id)
+            telegram.edit_message_text(chat_id, message_id, "Не удалось найти эту операцию.")
+            return
+        sheets.set_state(chat_id, STATE_STATUS_UPDATE, {"row_number": int(row_number)})
+        telegram.edit_message_text(
+            chat_id,
+            message_id,
+            "Выберите новый статус:\n"
+            f"{record.get('Дата и время')} | {record.get('Категория')} | "
+            f"{record.get('Сумма')} | {record.get('Описание')}",
+            reply_markup=status_keyboard(prefix="status_update"),
+        )
+        return
+
+    if data_value.startswith("status_update:") and state == STATE_STATUS_UPDATE:
+        status = data_value.split(":", 1)[1]
+        row_number = data.get("row_number")
+        if row_number and sheets.update_expense_status(int(row_number), chat_id, status):
+            sheets.clear_state(chat_id)
+            telegram.edit_message_text(chat_id, message_id, f"Статус обновлен: {status}")
+        else:
+            sheets.clear_state(chat_id)
+            telegram.edit_message_text(chat_id, message_id, "Не удалось обновить статус: операция не найдена.")
         return
 
     if data_value == "confirm:save" and state == STATE_CONFIRM:
