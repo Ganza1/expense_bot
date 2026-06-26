@@ -3,6 +3,7 @@ STATE_CRYPTO_CURRENCY = "crypto_currency"
 STATE_AMOUNT = "amount"
 STATE_DESCRIPTION = "description"
 STATE_CATEGORY = "category"
+STATE_STATUS = "status"
 STATE_CONFIRM = "confirm"
 STATE_DELETE_CONFIRM = "delete_confirm"
 STATE_UNDO_SAVED = "undo_saved"
@@ -20,6 +21,12 @@ CATEGORIES = (
     "Обучение",
     "Маркетинг",
     "Прочее",
+)
+
+STATUSES = (
+    "Оплачен",
+    "На рассмотрении",
+    "Отказ",
 )
 
 PAYMENT_GROUPS = ("Наличные", "Безналичные", "BTC", "ETH", "USDT")

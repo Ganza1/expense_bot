@@ -128,9 +128,11 @@ def history_text(rows, chat_id, limit=20):
     lines = ["Последние операции:"]
     for row in reversed(recent):
         group = payment_group(row)
+        status = row.get("Статус", "")
+        status_part = f" | {status}" if status else ""
         lines.append(
             f"{row.get('Дата и время')} | {group} | {row.get('Категория')} | "
-            f"{row.get('Сумма')} | {row.get('Описание')}"
+            f"{row.get('Сумма')} | {row.get('Описание')}{status_part}"
         )
     return "\n".join(lines)
 
@@ -145,6 +147,7 @@ def format_expense_confirmation(data, tz_name, created_at):
     lines.extend(
         [
             f"Категория: {data.get('category')}",
+            f"Статус: {data.get('status')}",
             f"Сумма: {data.get('amount')}",
             f"Описание: {data.get('description')}",
             f"Дата и время: {created_at.strftime('%Y-%m-%d %H:%M:%S')} {tz_name}",

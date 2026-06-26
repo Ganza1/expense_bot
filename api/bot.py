@@ -14,6 +14,7 @@ from keyboards.inline import (
     payment_keyboard,
     report_keyboard,
     saved_keyboard,
+    status_keyboard,
 )
 from services import reports, sheets
 from services.telegram import TelegramClient, TelegramError
@@ -28,6 +29,7 @@ from states.constants import (
     STATE_DELETE_CONFIRM,
     STATE_DESCRIPTION,
     STATE_PAYMENT_TYPE,
+    STATE_STATUS,
     STATE_UNDO_SAVED,
 )
 
@@ -115,6 +117,7 @@ def build_expense(data, chat_id):
         "Сумма": data.get("amount", ""),
         "Тип оплаты": data.get("payment_type", ""),
         "Криптовалюта": data.get("crypto_currency", ""),
+        "Статус": data.get("status", ""),
         "Chat ID": str(chat_id),
         "Timezone": tz_name,
     }
@@ -276,6 +279,13 @@ def handle_callback(callback, telegram):
     if data_value.startswith("category:") and state == STATE_CATEGORY:
         category = data_value.split(":", 1)[1]
         data["category"] = category
+        sheets.set_state(chat_id, STATE_STATUS, data)
+        telegram.edit_message_text(chat_id, message_id, "Выберите статус:", reply_markup=status_keyboard())
+        return
+
+    if data_value.startswith("status:") and state == STATE_STATUS:
+        status = data_value.split(":", 1)[1]
+        data["status"] = status
         tz_name = env_timezone()
         created_at = reports.now_in_timezone(tz_name)
         data["created_at"] = created_at.strftime("%Y-%m-%d %H:%M:%S")

@@ -1,4 +1,4 @@
-from states.constants import CATEGORIES, CRYPTO_CURRENCIES
+from states.constants import CATEGORIES, CRYPTO_CURRENCIES, STATUSES
 
 
 def button(text, callback_data):
@@ -48,6 +48,17 @@ def category_keyboard():
         "Прочее": "📁",
     }
     rows = [[button(f"{emoji.get(category, '')} {category}".strip(), f"category:{category}")] for category in CATEGORIES]
+    rows.append([button("❌ Отмена", "flow:cancel")])
+    return inline_keyboard(rows)
+
+
+def status_keyboard():
+    emoji = {
+        "Оплачен": "✅",
+        "На рассмотрении": "⏳",
+        "Отказ": "❌",
+    }
+    rows = [[button(f"{emoji.get(status, '')} {status}".strip(), f"status:{status}")] for status in STATUSES]
     rows.append([button("❌ Отмена", "flow:cancel")])
     return inline_keyboard(rows)
 
