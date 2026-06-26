@@ -27,6 +27,7 @@ from states.constants import (
     STATE_CATEGORY,
     STATE_CONFIRM,
     STATE_CRYPTO_CURRENCY,
+    STATE_CRYPTO_WALLET,
     STATE_DELETE_CONFIRM,
     STATE_DESCRIPTION,
     STATE_PAYMENT_TYPE,
@@ -139,6 +140,7 @@ def build_expense(data, chat_id):
         "Статус": data.get("status", ""),
         "Chat ID": str(chat_id),
         "Timezone": tz_name,
+        "Кошелек": data.get("crypto_wallet", ""),
     }
 
 
@@ -225,6 +227,13 @@ def handle_message(message, telegram):
         data["description"] = text[:500]
         sheets.set_state(chat_id, STATE_CATEGORY, data)
         telegram.send_message(chat_id, "Выберите категорию:", reply_markup=category_keyboard())
+    elif state == STATE_CRYPTO_WALLET:
+        if not text:
+            telegram.send_message(chat_id, "Номер кошелька не должен быть пустым.")
+            return
+        data["crypto_wallet"] = text[:200]
+        sheets.set_state(chat_id, STATE_AMOUNT, data)
+        telegram.send_message(chat_id, "Введите сумму.\nПример: 25")
     else:
         telegram.send_message(chat_id, "Выберите действие в меню или отправьте /add.", reply_markup=main_menu_keyboard())
 
@@ -295,8 +304,8 @@ def handle_callback(callback, telegram):
     if data_value.startswith("crypto:") and state == STATE_CRYPTO_CURRENCY:
         currency = data_value.split(":", 1)[1]
         data["crypto_currency"] = currency
-        sheets.set_state(chat_id, STATE_AMOUNT, data)
-        telegram.edit_message_text(chat_id, message_id, "Введите сумму.\nПример: 25")
+        sheets.set_state(chat_id, STATE_CRYPTO_WALLET, data)
+        telegram.edit_message_text(chat_id, message_id, "Введите номер кошелька.")
         return
 
     if data_value.startswith("category:") and state == STATE_CATEGORY:

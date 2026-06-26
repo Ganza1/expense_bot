@@ -1,5 +1,6 @@
 STATE_PAYMENT_TYPE = "payment_type"
 STATE_CRYPTO_CURRENCY = "crypto_currency"
+STATE_CRYPTO_WALLET = "crypto_wallet"
 STATE_AMOUNT = "amount"
 STATE_DESCRIPTION = "description"
 STATE_CATEGORY = "category"

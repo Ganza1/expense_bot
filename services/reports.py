@@ -142,6 +142,7 @@ def format_expense_confirmation(data, tz_name, created_at):
     if data.get("payment_type") == "Крипта":
         lines.append("Тип оплаты: Крипта")
         lines.append(f"Валюта: {data.get('crypto_currency')}")
+        lines.append(f"Кошелек: {data.get('crypto_wallet')}")
     else:
         lines.append(f"Способ оплаты: {data.get('payment_type')}")
     lines.extend(

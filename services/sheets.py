@@ -21,6 +21,7 @@ EXPENSE_HEADERS = [
     "Статус",
     "Chat ID",
     "Timezone",
+    "Кошелек",
 ]
 
 STATE_HEADERS = ["Chat ID", "State", "Data JSON", "Updated At"]
