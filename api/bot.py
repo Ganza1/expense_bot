@@ -91,14 +91,16 @@ def start_add_flow(chat_id, telegram):
 
 
 def start_status_update_flow(chat_id, telegram):
-    items = sheets.recent_expense_rows(chat_id, limit=10)
+    include_all = is_admin_chat(chat_id)
+    items = sheets.recent_expense_rows(chat_id, limit=10, include_all=include_all)
     if not items:
         telegram.send_message(chat_id, "Нет операций для изменения статуса.")
         return
     sheets.clear_state(chat_id)
+    title = "Выберите операцию для смены статуса:" if not include_all else "Выберите операцию для смены статуса по всей таблице:"
     telegram.send_message(
         chat_id,
-        "Выберите операцию для смены статуса:",
+        title,
         reply_markup=status_records_keyboard(items),
     )
 
@@ -378,7 +380,7 @@ def handle_callback(callback, telegram):
     if data_value.startswith("status_row:"):
         row_number = data_value.split(":", 1)[1]
         record = sheets.get_expense_row(row_number)
-        if not record or str(record.get("Chat ID", "")) != str(chat_id):
+        if not record or (not is_admin_chat(chat_id) and str(record.get("Chat ID", "")) != str(chat_id)):
             sheets.clear_state(chat_id)
             telegram.edit_message_text(chat_id, message_id, "Не удалось найти эту операцию.")
             return
@@ -388,7 +390,8 @@ def handle_callback(callback, telegram):
             message_id,
             "Выберите новый статус:\n"
             f"{record.get('Дата и время')} | {record.get('Категория')} | "
-            f"{record.get('Сумма')} | {record.get('Описание')}",
+            f"{record.get('Сумма')} | {record.get('Описание')}\n"
+            f"Chat ID: {record.get('Chat ID')}",
             reply_markup=status_keyboard(prefix="status_update"),
         )
         return
@@ -396,7 +399,7 @@ def handle_callback(callback, telegram):
     if data_value.startswith("status_update:") and state == STATE_STATUS_UPDATE:
         status = data_value.split(":", 1)[1]
         row_number = data.get("row_number")
-        if row_number and sheets.update_expense_status(int(row_number), chat_id, status):
+        if row_number and sheets.update_expense_status(int(row_number), chat_id, status, allow_any=is_admin_chat(chat_id)):
             sheets.clear_state(chat_id)
             telegram.edit_message_text(chat_id, message_id, f"Статус обновлен: {status}")
         else:

@@ -72,7 +72,8 @@ def status_records_keyboard(items):
         amount = record.get("Сумма", "")
         description = record.get("Описание", "")
         status = record.get("Статус", "") or "без статуса"
-        label = f"{index}. {date_time} | {amount} | {description} | {status}"
+        owner = record.get("Chat ID", "")
+        label = f"{index}. {date_time} | {amount} | {description} | {status} | {owner}"
         if len(label) > 60:
             label = label[:57] + "..."
         rows.append([button(label, f"status_row:{item['row_number']}")])

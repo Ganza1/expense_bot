@@ -145,14 +145,14 @@ def find_last_expense_row(chat_id):
     return None, None
 
 
-def recent_expense_rows(chat_id, limit=10):
+def recent_expense_rows(chat_id, limit=10, include_all=False):
     worksheet = get_expenses_sheet()
     rows = worksheet.get_all_values()
     chat_id = str(chat_id)
     result = []
     for index in range(len(rows), 1, -1):
         row = rows[index - 1]
-        if len(row) > CHAT_ID_INDEX and row[CHAT_ID_INDEX] == chat_id:
+        if include_all or (len(row) > CHAT_ID_INDEX and row[CHAT_ID_INDEX] == chat_id):
             result.append({"row_number": index, "record": _record_from_row(row)})
             if len(result) >= limit:
                 break
@@ -171,9 +171,11 @@ def get_expense_row(row_number):
     return _record_from_row(row)
 
 
-def update_expense_status(row_number, chat_id, status):
+def update_expense_status(row_number, chat_id, status, allow_any=False):
     current = get_expense_row(row_number)
-    if not current or str(current.get("Chat ID", "")) != str(chat_id):
+    if not current:
+        return False
+    if not allow_any and str(current.get("Chat ID", "")) != str(chat_id):
         return False
     worksheet = get_expenses_sheet()
     worksheet.update_cell(int(row_number), STATUS_INDEX + 1, status)
