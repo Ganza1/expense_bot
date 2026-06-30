@@ -99,6 +99,11 @@ def format_expense_line(row):
     )
 
 
+def format_expense_history_line(row):
+    status = str(row.get("Статус", "")).strip() or "Без статуса"
+    return f"{format_expense_line(row)} | Статус: {status}"
+
+
 def pending_and_rejected_text(rows):
     important = [row for row in rows if str(row.get("Статус", "")).strip() in ("На рассмотрении", "Отказ")]
     if not important:
@@ -111,7 +116,7 @@ def pending_and_rejected_text(rows):
             continue
         lines.append(f"{status}:")
         for row in status_rows[:10]:
-            lines.append(format_expense_line(row))
+            lines.append(format_expense_history_line(row))
         if len(status_rows) > 10:
             lines.append(f"...и еще {len(status_rows) - 10}")
     return lines
@@ -175,9 +180,8 @@ def history_text(rows, chat_id, limit=20):
     recent = own_rows[-limit:]
     lines = ["Последние операции:"]
     for row in reversed(recent):
-        status = row.get("Статус", "")
-        status_part = f" | {status}" if status else ""
-        lines.append(f"{format_expense_line(row)}{status_part}")
+        lines.append(format_expense_history_line(row))
+    lines.extend(pending_and_rejected_text(recent))
     return "\n".join(lines)
 
 
