@@ -45,6 +45,11 @@ def admin_chat_id():
     return os.environ.get("ADMIN_CHAT_ID", "").strip()
 
 
+def is_admin_chat(chat_id):
+    admin_id = admin_chat_id()
+    return bool(admin_id) and str(chat_id) == admin_id
+
+
 def json_response(handler, status, payload):
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     handler.send_response(status)
@@ -213,7 +218,7 @@ def handle_command(chat_id, command, telegram):
         start, end = reports.current_month_range(tz_name)
         telegram.send_message(chat_id, reports.build_period_report(rows, "Отчет за текущий месяц", start, end, tz_name, chat_id))
     elif command == "/history":
-        telegram.send_message(chat_id, reports.history_text(sheets.all_expenses(), chat_id))
+        telegram.send_message(chat_id, reports.history_text(sheets.all_expenses(), chat_id, include_all=is_admin_chat(chat_id)))
     elif command == "/status":
         start_status_update_flow(chat_id, telegram)
     elif command == "/delete_last":
@@ -300,7 +305,7 @@ def handle_callback(callback, telegram):
         if command == "add":
             start_add_flow(chat_id, telegram)
         elif command == "history":
-            telegram.send_message(chat_id, reports.history_text(sheets.all_expenses(), chat_id))
+            telegram.send_message(chat_id, reports.history_text(sheets.all_expenses(), chat_id, include_all=is_admin_chat(chat_id)))
         elif command == "help":
             send_help(chat_id, telegram)
         elif command == "report":

@@ -173,12 +173,13 @@ def build_period_report(rows, title, start_dt, end_dt, tz_name, chat_id=None):
     return report_text(f"{title}\n{period}", filtered)
 
 
-def history_text(rows, chat_id, limit=20):
-    own_rows = [row for row in rows if str(row.get("Chat ID", "")) == str(chat_id)]
-    if not own_rows:
+def history_text(rows, chat_id, limit=20, include_all=False):
+    history_rows = rows if include_all else [row for row in rows if str(row.get("Chat ID", "")) == str(chat_id)]
+    if not history_rows:
         return "История пуста."
-    recent = own_rows[-limit:]
-    lines = ["Последние операции:"]
+    recent = history_rows[-limit:]
+    title = "Последние операции по всей таблице:" if include_all else "Последние операции:"
+    lines = [title]
     for row in reversed(recent):
         lines.append(format_expense_history_line(row))
     lines.extend(pending_and_rejected_text(recent))
