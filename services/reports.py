@@ -3,7 +3,7 @@ from datetime import date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 from zoneinfo import ZoneInfo
 
-from states.constants import PAYMENT_GROUPS
+from states.constants import PAYMENT_GROUPS, STATUSES
 
 
 def timezone(name):
@@ -77,12 +77,60 @@ def summarize(rows):
     return groups, total
 
 
+def summarize_statuses(rows):
+    groups = OrderedDict((status, Decimal("0")) for status in STATUSES)
+    groups["Без статуса"] = Decimal("0")
+    counts = OrderedDict((status, 0) for status in groups)
+    for row in rows:
+        status = str(row.get("Статус", "")).strip() or "Без статуса"
+        if status not in groups:
+            groups[status] = Decimal("0")
+            counts[status] = 0
+        groups[status] += parse_amount(row.get("Сумма"))
+        counts[status] += 1
+    return groups, counts
+
+
+def format_expense_line(row):
+    group = payment_group(row)
+    return (
+        f"{row.get('Дата и время')} | {group} | {row.get('Категория')} | "
+        f"{row.get('Сумма')} | {row.get('Описание')}"
+    )
+
+
+def pending_and_rejected_text(rows):
+    important = [row for row in rows if str(row.get("Статус", "")).strip() in ("На рассмотрении", "Отказ")]
+    if not important:
+        return []
+
+    lines = ["", "Платежи на рассмотрении и отказ:"]
+    for status in ("На рассмотрении", "Отказ"):
+        status_rows = [row for row in important if str(row.get("Статус", "")).strip() == status]
+        if not status_rows:
+            continue
+        lines.append(f"{status}:")
+        for row in status_rows[:10]:
+            lines.append(format_expense_line(row))
+        if len(status_rows) > 10:
+            lines.append(f"...и еще {len(status_rows) - 10}")
+    return lines
+
+
 def report_text(title, rows):
     groups, total = summarize(rows)
+    status_groups, status_counts = summarize_statuses(rows)
     lines = [title, ""]
     for group, amount in groups.items():
         lines.append(f"{group}: {format_amount(amount)}")
     lines.extend(["", f"Общий итог: {format_amount(total)}", f"Операций: {len(rows)}"])
+    lines.append("")
+    lines.append("По статусам:")
+    for status, amount in status_groups.items():
+        count = status_counts.get(status, 0)
+        if count:
+            lines.append(f"{status}: {format_amount(amount)} ({count})")
+    lines.extend(pending_and_rejected_text(rows))
     return "\n".join(lines)
 
 
@@ -127,13 +175,9 @@ def history_text(rows, chat_id, limit=20):
     recent = own_rows[-limit:]
     lines = ["Последние операции:"]
     for row in reversed(recent):
-        group = payment_group(row)
         status = row.get("Статус", "")
         status_part = f" | {status}" if status else ""
-        lines.append(
-            f"{row.get('Дата и время')} | {group} | {row.get('Категория')} | "
-            f"{row.get('Сумма')} | {row.get('Описание')}{status_part}"
-        )
+        lines.append(f"{format_expense_line(row)}{status_part}")
     return "\n".join(lines)
 
 
