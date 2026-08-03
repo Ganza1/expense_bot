@@ -23,12 +23,17 @@ def authorized(headers):
 
 
 def admin_chat_ids():
-    raw = os.environ.get("ADMIN_CHAT_ID", "")
+    raw_values = []
+    for key in sorted(os.environ):
+        if key == "ADMIN_CHAT_ID" or key.startswith("ADMIN_CHAT_ID"):
+            raw_values.append(str(os.environ.get(key) or ""))
+
     result = []
-    for value in raw.replace(";", ",").split(","):
-        value = value.strip()
-        if value and value not in result:
-            result.append(value)
+    for raw in raw_values:
+        for value in raw.replace(";", ",").split(","):
+            value = value.strip()
+            if value and value not in result:
+                result.append(value)
     return result
 
 
