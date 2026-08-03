@@ -1,4 +1,4 @@
-from states.constants import CATEGORIES, CRYPTO_CURRENCIES, STATUSES
+from states.constants import CATEGORIES, CRYPTO_CURRENCIES, FIAT_CURRENCIES, STATUSES
 
 
 def button(text, callback_data):
@@ -39,6 +39,16 @@ def crypto_keyboard():
     )
 
 
+def currency_keyboard():
+    emoji = {
+        "RUB": "₽",
+        "USD": "$",
+    }
+    rows = [[button(f"{emoji.get(currency, '')} {currency}".strip(), f"currency:{currency}")] for currency in FIAT_CURRENCIES]
+    rows.append([button("❌ Отмена", "flow:cancel")])
+    return inline_keyboard(rows)
+
+
 def category_keyboard():
     emoji = {
         "Подписки": "💳",
@@ -70,10 +80,11 @@ def status_records_keyboard(items):
         record = item["record"]
         date_time = record.get("Дата и время", "")
         amount = record.get("Сумма", "")
+        currency = record.get("Валюта", "") or "RUB"
         description = record.get("Описание", "")
         status = record.get("Статус", "") or "без статуса"
         owner = record.get("Chat ID", "")
-        label = f"{index}. {date_time} | {amount} | {description} | {status} | {owner}"
+        label = f"{index}. {date_time} | {amount} {currency} | {description} | {status} | {owner}"
         if len(label) > 60:
             label = label[:57] + "..."
         rows.append([button(label, f"status_row:{item['row_number']}")])

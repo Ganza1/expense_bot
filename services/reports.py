@@ -3,7 +3,7 @@ from datetime import date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 from zoneinfo import ZoneInfo
 
-from states.constants import PAYMENT_GROUPS, STATUSES
+from states.constants import CURRENCY_RUB, FIAT_CURRENCIES, PAYMENT_GROUPS, STATUSES
 
 
 def timezone(name):
@@ -45,12 +45,28 @@ def parse_expense_datetime(row, tz_name):
         return None
 
 
+def fiat_currency(row):
+    currency = str(row.get("Валюта", "")).strip().upper()
+    return currency if currency in FIAT_CURRENCIES else CURRENCY_RUB
+
+
 def payment_group(row):
     payment_type = str(row.get("Тип оплаты", "")).strip()
     crypto = str(row.get("Криптовалюта", "")).strip().upper()
     if payment_type == "Крипта" and crypto:
         return crypto
+    if payment_type:
+        return f"{payment_type} {fiat_currency(row)}"
     return payment_type
+
+
+def amount_with_currency(row):
+    amount = row.get("Сумма")
+    if str(row.get("Тип оплаты", "")).strip() == "Крипта":
+        currency = str(row.get("Криптовалюта", "")).strip().upper()
+    else:
+        currency = fiat_currency(row)
+    return f"{amount} {currency}".strip()
 
 
 def filter_rows(rows, start_dt, end_dt, tz_name, chat_id=None):
@@ -95,7 +111,7 @@ def format_expense_line(row):
     group = payment_group(row)
     return (
         f"{row.get('Дата и время')} | {group} | {row.get('Категория')} | "
-        f"{row.get('Сумма')} | {row.get('Описание')}"
+        f"{amount_with_currency(row)} | {row.get('Описание')}"
     )
 
 
@@ -128,9 +144,20 @@ def report_text(title, rows):
     lines = [title, ""]
     for group, amount in groups.items():
         lines.append(f"{group}: {format_amount(amount)}")
-    lines.extend(["", f"Общий итог: {format_amount(total)}", f"Операций: {len(rows)}"])
-    lines.append("")
-    lines.append("По статусам:")
+    rub_total = sum(amount for group, amount in groups.items() if group.endswith("RUB"))
+    usd_total = sum(amount for group, amount in groups.items() if group.endswith("USD"))
+    crypto_total = total - rub_total - usd_total
+    lines.extend(
+        [
+            "",
+            f"Общий итог RUB: {format_amount(rub_total)}",
+            f"Общий итог USD: {format_amount(usd_total)}",
+            f"Общий итог крипта: {format_amount(crypto_total)}",
+            f"Операций: {len(rows)}",
+            "",
+            "По статусам:",
+        ]
+    )
     for status, amount in status_groups.items():
         count = status_counts.get(status, 0)
         if count:
@@ -194,6 +221,7 @@ def format_expense_confirmation(data, tz_name, created_at):
         lines.append(f"Кошелек: {data.get('crypto_wallet')}")
     else:
         lines.append(f"Способ оплаты: {data.get('payment_type')}")
+        lines.append(f"Валюта: {data.get('currency', CURRENCY_RUB)}")
     lines.extend(
         [
             f"Категория: {data.get('category')}",

@@ -8,6 +8,7 @@ from http.server import BaseHTTPRequestHandler
 from keyboards.inline import (
     category_keyboard,
     confirm_keyboard,
+    currency_keyboard,
     crypto_keyboard,
     delete_confirm_keyboard,
     main_menu_keyboard,
@@ -20,9 +21,12 @@ from keyboards.inline import (
 from services import reports, sheets
 from services.telegram import TelegramClient, TelegramError
 from states.constants import (
+    CURRENCY_RUB,
+    FIAT_CURRENCIES,
     PAYMENT_CARD,
     PAYMENT_CASH,
     PAYMENT_CRYPTO,
+    STATE_CURRENCY,
     STATE_AMOUNT,
     STATE_CATEGORY,
     STATE_CONFIRM,
@@ -41,13 +45,18 @@ def env_timezone():
     return os.environ.get("TIMEZONE", "Europe/Moscow")
 
 
-def admin_chat_id():
-    return os.environ.get("ADMIN_CHAT_ID", "").strip()
+def admin_chat_ids():
+    raw = os.environ.get("ADMIN_CHAT_ID", "")
+    result = []
+    for value in raw.replace(";", ",").split(","):
+        value = value.strip()
+        if value and value not in result:
+            result.append(value)
+    return result
 
 
 def is_admin_chat(chat_id):
-    admin_id = admin_chat_id()
-    return bool(admin_id) and str(chat_id) == admin_id
+    return str(chat_id) in admin_chat_ids()
 
 
 def json_response(handler, status, payload):
@@ -152,6 +161,7 @@ def build_expense(data, chat_id):
         "Chat ID": str(chat_id),
         "Timezone": tz_name,
         "Кошелек": data.get("crypto_wallet", ""),
+        "Валюта": data.get("currency", CURRENCY_RUB) if data.get("payment_type") != PAYMENT_CRYPTO else "",
     }
 
 
@@ -169,6 +179,8 @@ def expense_notification_text(expense, row_number=None):
         lines.append(f"Криптовалюта: {expense.get('Криптовалюта')}")
     if expense.get("Кошелек"):
         lines.append(f"Кошелек: {expense.get('Кошелек')}")
+    if expense.get("Валюта"):
+        lines.append(f"Валюта: {expense.get('Валюта')}")
     lines.extend(
         [
             f"Категория: {expense.get('Категория')}",
@@ -182,13 +194,12 @@ def expense_notification_text(expense, row_number=None):
 
 
 def notify_admin_about_expense(telegram, expense, row_number=None):
-    admin_id = admin_chat_id()
-    if not admin_id:
-        return
-    try:
-        telegram.send_message(admin_id, expense_notification_text(expense, row_number=row_number))
-    except TelegramError as exc:
-        print(f"Admin notification failed: {exc}", flush=True)
+    text = expense_notification_text(expense, row_number=row_number)
+    for admin_id in admin_chat_ids():
+        try:
+            telegram.send_message(admin_id, text)
+        except TelegramError as exc:
+            print(f"Admin notification failed for {admin_id}: {exc}", flush=True)
 
 
 def handle_command(chat_id, command, telegram):
@@ -344,8 +355,8 @@ def handle_callback(callback, telegram):
             sheets.set_state(chat_id, STATE_CRYPTO_CURRENCY, data)
             telegram.edit_message_text(chat_id, message_id, "Уточните валюту:", reply_markup=crypto_keyboard())
         else:
-            sheets.set_state(chat_id, STATE_AMOUNT, data)
-            telegram.edit_message_text(chat_id, message_id, "Введите сумму.\nПример: 2500")
+            sheets.set_state(chat_id, STATE_CURRENCY, data)
+            telegram.edit_message_text(chat_id, message_id, "Выберите валюту:", reply_markup=currency_keyboard())
         return
 
     if data_value.startswith("crypto:") and state == STATE_CRYPTO_CURRENCY:
@@ -353,6 +364,17 @@ def handle_callback(callback, telegram):
         data["crypto_currency"] = currency
         sheets.set_state(chat_id, STATE_CRYPTO_WALLET, data)
         telegram.edit_message_text(chat_id, message_id, "Введите номер кошелька.")
+        return
+
+    if data_value.startswith("currency:") and state == STATE_CURRENCY:
+        currency = data_value.split(":", 1)[1].upper()
+        if currency not in FIAT_CURRENCIES:
+            telegram.send_message(chat_id, "Не удалось распознать валюту. Попробуйте /add заново.")
+            sheets.clear_state(chat_id)
+            return
+        data["currency"] = currency
+        sheets.set_state(chat_id, STATE_AMOUNT, data)
+        telegram.edit_message_text(chat_id, message_id, "Введите сумму.\nПример: 2500")
         return
 
     if data_value.startswith("category:") and state == STATE_CATEGORY:

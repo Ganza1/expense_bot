@@ -22,18 +22,30 @@ def authorized(headers):
     return headers.get("Authorization") == f"Bearer {secret}"
 
 
+def admin_chat_ids():
+    raw = os.environ.get("ADMIN_CHAT_ID", "")
+    result = []
+    for value in raw.replace(";", ",").split(","):
+        value = value.strip()
+        if value and value not in result:
+            result.append(value)
+    return result
+
+
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if not authorized(self.headers):
             json_response(self, 401, {"ok": False, "error": "Unauthorized"})
             return
         tz_name = os.environ.get("TIMEZONE", "Europe/Moscow")
-        admin_chat_id = os.environ.get("ADMIN_CHAT_ID")
-        if not admin_chat_id:
+        admins = admin_chat_ids()
+        if not admins:
             json_response(self, 500, {"ok": False, "error": "ADMIN_CHAT_ID is not configured"})
             return
         rows = sheets.all_expenses()
         start, end = reports.previous_month_range(tz_name)
         text = reports.build_period_report(rows, "Ежемесячный отчет за прошлый месяц", start, end, tz_name)
-        TelegramClient().send_message(admin_chat_id, text)
+        telegram = TelegramClient()
+        for admin_chat_id in admins:
+            telegram.send_message(admin_chat_id, text)
         json_response(self, 200, {"ok": True})
