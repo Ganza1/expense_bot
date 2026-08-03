@@ -101,17 +101,17 @@ def row_number_from_append_result(result):
 
 def start_add_flow(chat_id, telegram):
     sheets.set_state(chat_id, STATE_PAYMENT_TYPE, {})
-    telegram.send_message(chat_id, "Выберите способ оплаты:", reply_markup=payment_keyboard())
+    telegram.send_message(chat_id, "💳 Выберите способ оплаты:", reply_markup=payment_keyboard())
 
 
 def start_status_update_flow(chat_id, telegram):
     include_all = is_admin_chat(chat_id)
     items = sheets.recent_expense_rows(chat_id, limit=10, include_all=include_all)
     if not items:
-        telegram.send_message(chat_id, "Нет операций для изменения статуса.")
+        telegram.send_message(chat_id, "📭 Нет операций для изменения статуса.")
         return
     sheets.clear_state(chat_id)
-    title = "Выберите операцию для смены статуса:" if not include_all else "Выберите операцию для смены статуса по всей таблице:"
+    title = "🔄 Выберите операцию для смены статуса:" if not include_all else "🔄 Выберите операцию для смены статуса по всей таблице:"
     telegram.send_message(
         chat_id,
         title,
@@ -122,7 +122,7 @@ def start_status_update_flow(chat_id, telegram):
 def send_start(chat_id, telegram):
     telegram.send_message(
         chat_id,
-        "Привет! Я помогу учитывать расходы в Google Sheets.",
+        "👋 Привет! Я помогу учитывать расходы в Google Sheets.",
         reply_markup=main_menu_keyboard(),
     )
 
@@ -132,16 +132,16 @@ def send_help(chat_id, telegram):
         chat_id,
         "\n".join(
             [
-                "Команды:",
-                "/add - добавить расход",
-                "/today - отчет за сегодня",
-                "/week - отчет за последние 7 дней",
-                "/month - отчет за текущий месяц",
-                "/history - последние 20 операций",
-                "/status - изменить статус одной из последних 10 операций",
-                "/delete_last - удалить последнюю запись",
-                "/time - текущее время Europe/Moscow",
-                "/id - показать chat_id",
+                "📋 Команды:",
+                "➕ /add - добавить расход",
+                "📅 /today - отчет за сегодня",
+                "🗓️ /week - отчет за последние 7 дней",
+                "📆 /month - отчет за текущий месяц",
+                "📜 /history - последние 20 операций",
+                "🔄 /status - изменить статус одной из последних 10 операций",
+                "🗑️ /delete_last - удалить последнюю запись",
+                "🕒 /time - текущее время Europe/Moscow",
+                "🆔 /id - показать chat_id",
             ]
         ),
     )
@@ -171,28 +171,28 @@ def build_expense(data, chat_id):
 
 
 def expense_notification_text(expense, row_number=None):
-    lines = ["Создана новая оплата"]
+    lines = ["🆕 Создана новая оплата"]
     if row_number:
-        lines.append(f"Строка: {row_number}")
+        lines.append(f"📌 Строка: {row_number}")
     lines.extend(
         [
-            f"Дата и время: {expense.get('Дата и время')}",
-            f"Тип оплаты: {expense.get('Тип оплаты')}",
+            f"🕒 Дата и время: {expense.get('Дата и время')}",
+            f"💳 Тип оплаты: {expense.get('Тип оплаты')}",
         ]
     )
     if expense.get("Криптовалюта"):
-        lines.append(f"Криптовалюта: {expense.get('Криптовалюта')}")
+        lines.append(f"💱 Криптовалюта: {expense.get('Криптовалюта')}")
     if expense.get("Кошелек"):
-        lines.append(f"Кошелек: {expense.get('Кошелек')}")
+        lines.append(f"👛 Кошелек: {expense.get('Кошелек')}")
     if expense.get("Валюта"):
-        lines.append(f"Валюта: {expense.get('Валюта')}")
+        lines.append(f"💱 Валюта: {expense.get('Валюта')}")
     lines.extend(
         [
-            f"Категория: {expense.get('Категория')}",
-            f"Статус: {expense.get('Статус')}",
-            f"Сумма: {expense.get('Сумма')}",
-            f"Описание: {expense.get('Описание')}",
-            f"Chat ID: {expense.get('Chat ID')}",
+            f"🏷️ Категория: {expense.get('Категория')}",
+            f"🔄 Статус: {expense.get('Статус')}",
+            f"💰 Сумма: {expense.get('Сумма')}",
+            f"📝 Описание: {expense.get('Описание')}",
+            f"🆔 Chat ID: {expense.get('Chat ID')}",
         ]
     )
     return "\n".join(lines)
@@ -217,7 +217,7 @@ def handle_command(chat_id, command, telegram):
             print(f"Sheets setup failed on /start: {exc}", flush=True)
             telegram.send_message(
                 chat_id,
-                "Бот запущен, но Google Sheets пока не настроен. Проверьте переменные GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_SHEET_ID и доступ service account к таблице.",
+                "⚠️ Бот запущен, но Google Sheets пока не настроен. Проверьте переменные GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_SHEET_ID и доступ service account к таблице.",
             )
     elif command == "/help":
         send_help(chat_id, telegram)
@@ -242,12 +242,12 @@ def handle_command(chat_id, command, telegram):
     elif command == "/delete_last":
         row_number, record = sheets.find_last_expense_row(chat_id)
         if not row_number:
-            telegram.send_message(chat_id, "Нет записей для удаления.")
+            telegram.send_message(chat_id, "📭 Нет записей для удаления.")
             return
         sheets.set_state(chat_id, STATE_DELETE_CONFIRM, {"row_number": row_number})
         telegram.send_message(
             chat_id,
-            "Удалить последнюю запись?\n"
+            "🗑️ Удалить последнюю запись?\n"
             f"{record.get('Дата и время')} | {record.get('Категория')} | {record.get('Сумма')} | {record.get('Описание')}",
             reply_markup=delete_confirm_keyboard(),
         )
@@ -255,13 +255,13 @@ def handle_command(chat_id, command, telegram):
         now = reports.now_in_timezone(tz_name)
         telegram.send_message(chat_id, f"{now.strftime('%Y-%m-%d %H:%M:%S')} {tz_name}")
     elif command == "/id":
-        telegram.send_message(chat_id, f"Ваш chat_id: {chat_id}")
+        telegram.send_message(chat_id, f"🆔 Ваш chat_id: {chat_id}")
     else:
-        telegram.send_message(chat_id, "Неизвестная команда. Нажмите /help.")
+        telegram.send_message(chat_id, "❓ Неизвестная команда. Нажмите /help.")
 
 
 def show_report_menu(chat_id, telegram):
-    telegram.send_message(chat_id, "Выберите отчет:", reply_markup=report_keyboard())
+    telegram.send_message(chat_id, "📊 Выберите отчет:", reply_markup=report_keyboard())
 
 
 def handle_message(message, telegram):
@@ -278,27 +278,27 @@ def handle_message(message, telegram):
     if state == STATE_AMOUNT:
         amount = parse_amount(text)
         if amount is None:
-            telegram.send_message(chat_id, "Введите положительную сумму числом. Например: 2500")
+            telegram.send_message(chat_id, "💰 Введите положительную сумму числом. Например: 2500")
             return
         data["amount"] = amount
         sheets.set_state(chat_id, STATE_DESCRIPTION, data)
-        telegram.send_message(chat_id, "Введите описание.\nПример: Яндекс Директ")
+        telegram.send_message(chat_id, "📝 Введите описание.\nПример: Яндекс Директ")
     elif state == STATE_DESCRIPTION:
         if not text:
-            telegram.send_message(chat_id, "Описание не должно быть пустым.")
+            telegram.send_message(chat_id, "📝 Описание не должно быть пустым.")
             return
         data["description"] = text[:500]
         sheets.set_state(chat_id, STATE_CATEGORY, data)
-        telegram.send_message(chat_id, "Выберите категорию:", reply_markup=category_keyboard())
+        telegram.send_message(chat_id, "🏷️ Выберите категорию:", reply_markup=category_keyboard())
     elif state == STATE_CRYPTO_WALLET:
         if not text:
-            telegram.send_message(chat_id, "Номер кошелька не должен быть пустым.")
+            telegram.send_message(chat_id, "👛 Номер кошелька не должен быть пустым.")
             return
         data["crypto_wallet"] = text[:200]
         sheets.set_state(chat_id, STATE_AMOUNT, data)
-        telegram.send_message(chat_id, "Введите сумму.\nПример: 25")
+        telegram.send_message(chat_id, "💰 Введите сумму.\nПример: 25")
     else:
-        telegram.send_message(chat_id, "Выберите действие в меню или отправьте /add.", reply_markup=main_menu_keyboard())
+        telegram.send_message(chat_id, "👇 Выберите действие в меню или отправьте /add.", reply_markup=main_menu_keyboard())
 
 
 def handle_callback(callback, telegram):
@@ -315,7 +315,7 @@ def handle_callback(callback, telegram):
 
     if data_value == "flow:cancel" or data_value == "confirm:cancel":
         sheets.clear_state(chat_id)
-        telegram.edit_message_text(chat_id, message_id, "Действие отменено.")
+        telegram.edit_message_text(chat_id, message_id, "❌ Действие отменено.")
         return
 
     if data_value.startswith("cmd:"):
@@ -358,17 +358,17 @@ def handle_callback(callback, telegram):
             return
         if data["payment_type"] == PAYMENT_CRYPTO:
             sheets.set_state(chat_id, STATE_CRYPTO_CURRENCY, data)
-            telegram.edit_message_text(chat_id, message_id, "Уточните валюту:", reply_markup=crypto_keyboard())
+            telegram.edit_message_text(chat_id, message_id, "💱 Уточните валюту:", reply_markup=crypto_keyboard())
         else:
             sheets.set_state(chat_id, STATE_CURRENCY, data)
-            telegram.edit_message_text(chat_id, message_id, "Выберите валюту:", reply_markup=currency_keyboard())
+            telegram.edit_message_text(chat_id, message_id, "💱 Выберите валюту:", reply_markup=currency_keyboard())
         return
 
     if data_value.startswith("crypto:") and state == STATE_CRYPTO_CURRENCY:
         currency = data_value.split(":", 1)[1]
         data["crypto_currency"] = currency
         sheets.set_state(chat_id, STATE_CRYPTO_WALLET, data)
-        telegram.edit_message_text(chat_id, message_id, "Введите номер кошелька.")
+        telegram.edit_message_text(chat_id, message_id, "👛 Введите номер кошелька.")
         return
 
     if data_value.startswith("currency:") and state == STATE_CURRENCY:
@@ -379,14 +379,14 @@ def handle_callback(callback, telegram):
             return
         data["currency"] = currency
         sheets.set_state(chat_id, STATE_AMOUNT, data)
-        telegram.edit_message_text(chat_id, message_id, "Введите сумму.\nПример: 2500")
+        telegram.edit_message_text(chat_id, message_id, "💰 Введите сумму.\nПример: 2500")
         return
 
     if data_value.startswith("category:") and state == STATE_CATEGORY:
         category = data_value.split(":", 1)[1]
         data["category"] = category
         sheets.set_state(chat_id, STATE_STATUS, data)
-        telegram.edit_message_text(chat_id, message_id, "Выберите статус:", reply_markup=status_keyboard())
+        telegram.edit_message_text(chat_id, message_id, "🔄 Выберите статус:", reply_markup=status_keyboard())
         return
 
     if data_value.startswith("status:") and state == STATE_STATUS:
@@ -409,16 +409,16 @@ def handle_callback(callback, telegram):
         record = sheets.get_expense_row(row_number)
         if not record or (not is_admin_chat(chat_id) and str(record.get("Chat ID", "")) != str(chat_id)):
             sheets.clear_state(chat_id)
-            telegram.edit_message_text(chat_id, message_id, "Не удалось найти эту операцию.")
+            telegram.edit_message_text(chat_id, message_id, "⚠️ Не удалось найти эту операцию.")
             return
         sheets.set_state(chat_id, STATE_STATUS_UPDATE, {"row_number": int(row_number)})
         telegram.edit_message_text(
             chat_id,
             message_id,
-            "Выберите новый статус:\n"
+            "🔄 Выберите новый статус:\n"
             f"{record.get('Дата и время')} | {record.get('Категория')} | "
             f"{record.get('Сумма')} | {record.get('Описание')}\n"
-            f"Chat ID: {record.get('Chat ID')}",
+            f"🆔 Chat ID: {record.get('Chat ID')}",
             reply_markup=status_keyboard(prefix="status_update"),
         )
         return
@@ -428,10 +428,10 @@ def handle_callback(callback, telegram):
         row_number = data.get("row_number")
         if row_number and sheets.update_expense_status(int(row_number), chat_id, status, allow_any=is_admin_chat(chat_id)):
             sheets.clear_state(chat_id)
-            telegram.edit_message_text(chat_id, message_id, f"Статус обновлен: {status}")
+            telegram.edit_message_text(chat_id, message_id, f"✅ Статус обновлен: {status}")
         else:
             sheets.clear_state(chat_id)
-            telegram.edit_message_text(chat_id, message_id, "Не удалось обновить статус: операция не найдена.")
+            telegram.edit_message_text(chat_id, message_id, "⚠️ Не удалось обновить статус: операция не найдена.")
         return
 
     if data_value == "confirm:save" and state == STATE_CONFIRM:
@@ -450,7 +450,7 @@ def handle_callback(callback, telegram):
         else:
             sheets.clear_state(chat_id)
         notify_admin_about_expense(telegram, expense, row_number=row_number)
-        telegram.edit_message_text(chat_id, message_id, "Запись сохранена в лист Expenses.", reply_markup=saved_keyboard())
+        telegram.edit_message_text(chat_id, message_id, "✅ Запись сохранена в лист Expenses.", reply_markup=saved_keyboard())
         return
 
     if data_value == "undo:saved" and state == STATE_UNDO_SAVED:
@@ -458,10 +458,10 @@ def handle_callback(callback, telegram):
         expense = data.get("expense", {})
         if row_number and expense and sheets.delete_expense_row_if_matches(int(row_number), expense):
             sheets.clear_state(chat_id)
-            telegram.edit_message_text(chat_id, message_id, "Запись отменена и удалена из Expenses.")
+            telegram.edit_message_text(chat_id, message_id, "↩️ Запись отменена и удалена из Expenses.")
         else:
             sheets.clear_state(chat_id)
-            telegram.edit_message_text(chat_id, message_id, "Не удалось отменить запись: она уже изменена или удалена.")
+            telegram.edit_message_text(chat_id, message_id, "⚠️ Не удалось отменить запись: она уже изменена или удалена.")
         return
 
     if data_value == "delete:confirm" and state == STATE_DELETE_CONFIRM:
@@ -469,17 +469,17 @@ def handle_callback(callback, telegram):
         if row_number:
             sheets.delete_expense_row(int(row_number))
             sheets.clear_state(chat_id)
-            telegram.edit_message_text(chat_id, message_id, "Последняя запись удалена.")
+            telegram.edit_message_text(chat_id, message_id, "🗑️ Последняя запись удалена.")
         else:
-            telegram.edit_message_text(chat_id, message_id, "Не удалось найти запись для удаления.")
+            telegram.edit_message_text(chat_id, message_id, "⚠️ Не удалось найти запись для удаления.")
         return
 
     if data_value == "delete:cancel":
         sheets.clear_state(chat_id)
-        telegram.edit_message_text(chat_id, message_id, "Удаление отменено.")
+        telegram.edit_message_text(chat_id, message_id, "❌ Удаление отменено.")
         return
 
-    telegram.send_message(chat_id, "Состояние устарело. Начните заново: /add")
+    telegram.send_message(chat_id, "⏳ Состояние устарело. Начните заново: /add")
     sheets.clear_state(chat_id)
 
 
