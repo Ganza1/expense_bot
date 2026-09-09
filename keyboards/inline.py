@@ -14,6 +14,7 @@ def main_menu_keyboard():
         [
             [button("➕ Добавить расход", "cmd:add"), button("📊 Отчет", "cmd:report")],
             [button("📜 История", "cmd:history"), button("🔁 Статус", "cmd:status")],
+            [button("✏️ Изменить", "cmd:edit"), button("🗑️ Удалить", "cmd:delete")],
             [button("ℹ Помощь", "cmd:help")],
         ]
     )
@@ -88,6 +89,45 @@ def status_records_keyboard(items):
         if len(label) > 60:
             label = label[:57] + "..."
         rows.append([button(label, f"status_row:{item['row_number']}")])
+    rows.append([button("❌ Отмена", "flow:cancel")])
+    return inline_keyboard(rows)
+
+
+def records_keyboard(items, prefix):
+    rows = []
+    for index, item in enumerate(items, start=1):
+        record = item["record"]
+        date_time = record.get("Дата и время", "")
+        amount = record.get("Сумма", "")
+        currency = record.get("Валюта", "") or record.get("Криптовалюта", "") or "RUB"
+        description = record.get("Описание", "")
+        status = record.get("Статус", "") or "без статуса"
+        owner = record.get("Chat ID", "")
+        label = f"{index}. {date_time} | {amount} {currency} | {description} | {status} | {owner}"
+        if len(label) > 60:
+            label = label[:57] + "..."
+        rows.append([button(label, f"{prefix}:{item['row_number']}")])
+    rows.append([button("❌ Отмена", "flow:cancel")])
+    return inline_keyboard(rows)
+
+
+def delete_records_keyboard(items):
+    return records_keyboard(items, "delete_row")
+
+
+def edit_records_keyboard(items):
+    return records_keyboard(items, "edit_row")
+
+
+def edit_field_keyboard(record):
+    rows = [
+        [button("💰 Сумма", "edit_field:amount"), button("📝 Описание", "edit_field:description")],
+        [button("🏷️ Категория", "edit_field:category"), button("🔄 Статус", "edit_field:status")],
+    ]
+    if record.get("Тип оплаты") != "Крипта":
+        rows.append([button("💱 Валюта", "edit_field:currency")])
+    else:
+        rows.append([button("👛 Кошелек", "edit_field:crypto_wallet")])
     rows.append([button("❌ Отмена", "flow:cancel")])
     return inline_keyboard(rows)
 

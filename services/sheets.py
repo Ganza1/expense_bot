@@ -183,6 +183,40 @@ def update_expense_status(row_number, chat_id, status, allow_any=False):
     return True
 
 
+def _column_number(header):
+    try:
+        return EXPENSE_HEADERS.index(header) + 1
+    except ValueError:
+        return None
+
+
+def update_expense_fields(row_number, chat_id, fields, allow_any=False):
+    current = get_expense_row(row_number)
+    if not current:
+        return False, None
+    if not allow_any and str(current.get("Chat ID", "")) != str(chat_id):
+        return False, None
+
+    worksheet = get_expenses_sheet()
+    updates = []
+    for header, value in fields.items():
+        column = _column_number(header)
+        if not column:
+            continue
+        updates.append(
+            {
+                "range": gspread.utils.rowcol_to_a1(int(row_number), column),
+                "values": [[value]],
+            }
+        )
+
+    if not updates:
+        return False, current
+
+    worksheet.batch_update(updates, value_input_option="USER_ENTERED")
+    return True, get_expense_row(row_number)
+
+
 def expense_matches(record, expected):
     if not record:
         return False
