@@ -166,3 +166,12 @@ def delete_confirm_keyboard():
             [button("❌ Отмена", "delete:cancel")],
         ]
     )
+
+
+def delete_approval_keyboard(requester_chat_id, row_number):
+    return inline_keyboard(
+        [
+            [button("✅ Разрешить удаление", f"delete_approve:{requester_chat_id}:{row_number}")],
+            [button("❌ Отказать", f"delete_reject:{requester_chat_id}:{row_number}")],
+        ]
+    )

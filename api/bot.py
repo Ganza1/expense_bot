@@ -10,6 +10,7 @@ from keyboards.inline import (
     confirm_keyboard,
     currency_keyboard,
     crypto_keyboard,
+    delete_approval_keyboard,
     delete_confirm_keyboard,
     delete_records_keyboard,
     edit_field_keyboard,
@@ -36,6 +37,7 @@ from states.constants import (
     STATE_CRYPTO_CURRENCY,
     STATE_CRYPTO_WALLET,
     STATE_DELETE_CONFIRM,
+    STATE_DELETE_PENDING,
     STATE_DELETE_SELECT,
     STATE_DESCRIPTION,
     STATE_EDIT_FIELD,
@@ -181,6 +183,34 @@ def notify_admin_about_change(telegram, action, record, changed_by_chat_id, row_
             telegram.send_message(admin_id, text)
         except TelegramError as exc:
             print(f"Admin change notification failed for {admin_id}: {exc}", flush=True)
+
+
+def request_delete_approval(telegram, requester_chat_id, row_number, record):
+    sheets.set_state(
+        requester_chat_id,
+        STATE_DELETE_PENDING,
+        {"row_number": int(row_number), "record": record},
+    )
+    text = "\n".join(
+        [
+            "🗑️ Запрос на удаление операции",
+            f"👤 Chat ID пользователя: {requester_chat_id}",
+            f"📌 Строка: {row_number}",
+            operation_summary(record),
+        ]
+    )
+    delivered = False
+    for admin_id in admin_chat_ids():
+        try:
+            telegram.send_message(
+                admin_id,
+                text,
+                reply_markup=delete_approval_keyboard(requester_chat_id, row_number),
+            )
+            delivered = True
+        except TelegramError as exc:
+            print(f"Delete approval request failed for {admin_id}: {exc}", flush=True)
+    return delivered
 
 
 def send_start(chat_id, telegram):
@@ -684,13 +714,57 @@ def handle_callback(callback, telegram):
     if data_value == "delete:confirm" and state == STATE_DELETE_CONFIRM:
         row_number = data.get("row_number")
         record = data.get("record", {})
-        if row_number and record and sheets.delete_expense_row_if_matches(int(row_number), record):
+        if not row_number or not record:
+            sheets.clear_state(chat_id)
+            telegram.edit_message_text(chat_id, message_id, "⚠️ Не удалось найти операцию для удаления.")
+        elif is_admin_chat(chat_id) and sheets.delete_expense_row_if_matches(int(row_number), record):
             sheets.clear_state(chat_id)
             notify_admin_about_change(telegram, "🗑️ Оплата удалена", record, chat_id, row_number=row_number)
             telegram.edit_message_text(chat_id, message_id, "🗑️ Оплата удалена.")
-        else:
+        elif is_admin_chat(chat_id):
             sheets.clear_state(chat_id)
             telegram.edit_message_text(chat_id, message_id, "⚠️ Не удалось удалить запись: она уже изменена или удалена.")
+        elif str(record.get("Chat ID", "")) != str(chat_id):
+            sheets.clear_state(chat_id)
+            telegram.edit_message_text(chat_id, message_id, "⛔ Нельзя удалить чужую операцию.")
+        elif request_delete_approval(telegram, chat_id, row_number, record):
+            telegram.edit_message_text(chat_id, message_id, "⏳ Запрос отправлен администратору. Ожидайте решения.")
+        else:
+            sheets.clear_state(chat_id)
+            telegram.edit_message_text(chat_id, message_id, "⚠️ Не удалось отправить запрос администратору.")
+        return
+
+    if data_value.startswith("delete_approve:") or data_value.startswith("delete_reject:"):
+        if not is_admin_chat(chat_id):
+            telegram.send_message(chat_id, "⛔ Это действие доступно только администратору.")
+            return
+        action, requester_chat_id, requested_row = data_value.split(":", 2)
+        requester_state_info = sheets.get_state(requester_chat_id)
+        requester_state = requester_state_info.get("state", "")
+        requester_data = requester_state_info.get("data", {})
+        row_number = requester_data.get("row_number")
+        record = requester_data.get("record", {})
+        if (
+            requester_state != STATE_DELETE_PENDING
+            or str(row_number) != str(requested_row)
+            or str(record.get("Chat ID", "")) != str(requester_chat_id)
+        ):
+            telegram.edit_message_text(chat_id, message_id, "⚠️ Запрос уже обработан или устарел.")
+            return
+        if action == "delete_reject":
+            sheets.clear_state(requester_chat_id)
+            telegram.edit_message_text(chat_id, message_id, "❌ Удаление отклонено.")
+            telegram.send_message(requester_chat_id, "❌ Администратор отклонил удаление операции:\n" + operation_summary(record))
+            return
+        if sheets.delete_expense_row_if_matches(int(row_number), record):
+            sheets.clear_state(requester_chat_id)
+            telegram.edit_message_text(chat_id, message_id, "✅ Удаление разрешено. Операция удалена.")
+            telegram.send_message(requester_chat_id, "✅ Администратор разрешил удаление. Операция удалена:\n" + operation_summary(record))
+            notify_admin_about_change(telegram, "🗑️ Оплата удалена по запросу пользователя", record, chat_id, row_number=row_number)
+        else:
+            sheets.clear_state(requester_chat_id)
+            telegram.edit_message_text(chat_id, message_id, "⚠️ Операция уже изменена или удалена.")
+            telegram.send_message(requester_chat_id, "⚠️ Операцию не удалось удалить: она уже изменена или удалена.")
         return
 
     if data_value == "delete:cancel":
