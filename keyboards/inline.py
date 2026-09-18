@@ -10,14 +10,17 @@ def inline_keyboard(rows):
 
 
 def main_menu_keyboard():
-    return inline_keyboard(
-        [
-            [button("➕ Добавить расход", "cmd:add"), button("📊 Отчет", "cmd:report")],
-            [button("📜 История", "cmd:history"), button("🔁 Статус", "cmd:status")],
-            [button("✏️ Изменить", "cmd:edit"), button("🗑️ Удалить", "cmd:delete")],
-            [button("ℹ Помощь", "cmd:help")],
-        ]
-    )
+    return {
+        "keyboard": [
+            [{"text": "➕ Добавить расход"}, {"text": "📊 Отчет"}],
+            [{"text": "📜 История"}, {"text": "🔁 Статус"}],
+            [{"text": "✏️ Изменить"}, {"text": "🗑️ Удалить"}],
+            [{"text": "ℹ Помощь"}],
+        ],
+        "resize_keyboard": True,
+        "is_persistent": True,
+        "one_time_keyboard": False,
+    }
 
 
 def payment_keyboard():

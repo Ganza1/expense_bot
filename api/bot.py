@@ -370,6 +370,23 @@ def handle_message(message, telegram):
         handle_command(chat_id, text.split()[0], telegram)
         return
 
+    menu_commands = {
+        "➕ Добавить расход": "/add",
+        "📜 История": "/history",
+        "🔁 Статус": "/status",
+        "✏️ Изменить": "/edit",
+        "🗑️ Удалить": "/delete",
+        "ℹ Помощь": "/help",
+    }
+    if text == "📊 Отчет":
+        sheets.clear_state(chat_id)
+        show_report_menu(chat_id, telegram)
+        return
+    if text in menu_commands:
+        sheets.clear_state(chat_id)
+        handle_command(chat_id, menu_commands[text], telegram)
+        return
+
     current = sheets.get_state(chat_id)
     state = current["state"]
     data = current["data"]
