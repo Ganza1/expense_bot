@@ -30,6 +30,11 @@ CHAT_ID_INDEX = EXPENSE_HEADERS.index("Chat ID")
 STATUS_INDEX = EXPENSE_HEADERS.index("Статус")
 
 
+_CLIENT_CACHE = None
+_SPREADSHEET_CACHE = None
+_WORKSHEET_CACHE = {}
+
+
 class SheetsError(RuntimeError):
     pass
 
@@ -45,31 +50,47 @@ def _load_service_account_info():
 
 
 def _client():
+    global _CLIENT_CACHE
+    if _CLIENT_CACHE is not None:
+        return _CLIENT_CACHE
+
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive",
     ]
     credentials = Credentials.from_service_account_info(_load_service_account_info(), scopes=scopes)
-    return gspread.authorize(credentials)
+    _CLIENT_CACHE = gspread.authorize(credentials)
+    return _CLIENT_CACHE
 
 
 def _spreadsheet():
+    global _SPREADSHEET_CACHE
+    if _SPREADSHEET_CACHE is not None:
+        return _SPREADSHEET_CACHE
+
     sheet_id = os.environ.get("GOOGLE_SHEET_ID")
     if not sheet_id:
         raise SheetsError("GOOGLE_SHEET_ID is not configured")
-    return _client().open_by_key(sheet_id)
+    _SPREADSHEET_CACHE = _client().open_by_key(sheet_id)
+    return _SPREADSHEET_CACHE
 
 
-def _worksheet(spreadsheet, title, headers):
-    try:
-        worksheet = spreadsheet.worksheet(title)
-    except gspread.WorksheetNotFound:
-        worksheet = spreadsheet.add_worksheet(title=title, rows=1000, cols=max(len(headers), 10))
+def _worksheet(spreadsheet, title, headers, ensure_headers=False):
+    worksheet = _WORKSHEET_CACHE.get(title)
+    created = False
+    if worksheet is None:
+        try:
+            worksheet = spreadsheet.worksheet(title)
+        except gspread.WorksheetNotFound:
+            worksheet = spreadsheet.add_worksheet(title=title, rows=1000, cols=max(len(headers), 10))
+            created = True
+        _WORKSHEET_CACHE[title] = worksheet
 
-    first_row = worksheet.row_values(1)
-    if first_row != headers:
-        worksheet.resize(rows=max(worksheet.row_count, 1000), cols=max(len(headers), worksheet.col_count))
-        worksheet.update("A1", [headers])
+    if created or ensure_headers:
+        first_row = worksheet.row_values(1)
+        if first_row != headers:
+            worksheet.resize(rows=max(worksheet.row_count, 1000), cols=max(len(headers), worksheet.col_count))
+            worksheet.update("A1", [headers])
     return worksheet
 
 
@@ -83,8 +104,8 @@ def get_states_sheet():
 
 def ensure_sheets():
     spreadsheet = _spreadsheet()
-    _worksheet(spreadsheet, EXPENSES_SHEET, EXPENSE_HEADERS)
-    _worksheet(spreadsheet, STATES_SHEET, STATE_HEADERS)
+    _worksheet(spreadsheet, EXPENSES_SHEET, EXPENSE_HEADERS, ensure_headers=True)
+    _worksheet(spreadsheet, STATES_SHEET, STATE_HEADERS, ensure_headers=True)
 
 
 def append_expense(expense):
