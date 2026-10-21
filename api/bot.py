@@ -123,7 +123,7 @@ def start_add_flow(chat_id, telegram, telegram_user=None):
 
 def start_status_update_flow(chat_id, telegram):
     include_all = is_admin_chat(chat_id)
-    items = sheets.recent_expense_rows(chat_id, limit=10, include_all=include_all)
+    items = sheets.recent_expense_rows(chat_id, limit=20, include_all=include_all)
     if not items:
         telegram.send_message(chat_id, "📭 Нет операций для изменения статуса.")
         return
@@ -162,7 +162,7 @@ def start_delete_flow(chat_id, telegram):
 
 def start_edit_flow(chat_id, telegram):
     include_all = is_admin_chat(chat_id)
-    items = sheets.recent_expense_rows(chat_id, limit=10, include_all=include_all)
+    items = sheets.recent_expense_rows(chat_id, limit=20, include_all=include_all)
     if not items:
         telegram.send_message(chat_id, "📭 Нет операций для изменения.")
         return
@@ -240,8 +240,8 @@ def send_help(chat_id, telegram):
                 "🗓️ /week - отчет за последние 7 дней",
                 "📆 /month - отчет за текущий месяц",
                 "📜 /history - последние 20 операций",
-                "🔄 /status - изменить статус одной из последних 10 операций",
-                "✏️ /edit - изменить одну из последних 10 операций",
+                "🔄 /status - изменить статус одной из последних 20 операций",
+                "✏️ /edit - изменить одну из последних 20 операций",
                 "🗑️ /delete - удалить одну из последних 10 операций",
                 "🗑️ /delete_last - удалить последнюю запись",
                 "🕒 /time - текущее время Europe/Moscow",
