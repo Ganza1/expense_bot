@@ -94,10 +94,16 @@ def amount_with_currency(row):
     return f"{amount} {currency}".strip()
 
 
+def chat_id_matches(value, chat_id):
+    stored = str(value or "").strip()
+    expected = str(chat_id)
+    return stored == expected or stored.endswith(f"({expected})")
+
+
 def filter_rows(rows, start_dt, end_dt, tz_name, chat_id=None):
     result = []
     for row in rows:
-        if chat_id is not None and str(row.get("Chat ID", "")) != str(chat_id):
+        if chat_id is not None and not chat_id_matches(row.get("Chat ID", ""), chat_id):
             continue
         row_dt = parse_expense_datetime(row, tz_name)
         if row_dt and start_dt <= row_dt < end_dt:
@@ -226,7 +232,7 @@ def build_period_report(rows, title, start_dt, end_dt, tz_name, chat_id=None):
 
 
 def history_text(rows, chat_id, limit=20, include_all=False):
-    history_rows = rows if include_all else [row for row in rows if str(row.get("Chat ID", "")) == str(chat_id)]
+    history_rows = rows if include_all else [row for row in rows if chat_id_matches(row.get("Chat ID", ""), chat_id)]
     if not history_rows:
         return "📭 История пуста."
     recent = history_rows[-limit:]

@@ -155,13 +155,19 @@ def clear_state(chat_id):
         worksheet.delete_rows(current["row"])
 
 
+def chat_id_matches(value, chat_id):
+    stored = str(value or "").strip()
+    expected = str(chat_id)
+    return stored == expected or stored.endswith(f"({expected})")
+
+
 def find_last_expense_row(chat_id):
     worksheet = get_expenses_sheet()
     rows = worksheet.get_all_values()
     chat_id = str(chat_id)
     for index in range(len(rows), 1, -1):
         row = rows[index - 1]
-        if len(row) > CHAT_ID_INDEX and row[CHAT_ID_INDEX] == chat_id:
+        if len(row) > CHAT_ID_INDEX and chat_id_matches(row[CHAT_ID_INDEX], chat_id):
             record = _record_from_row(row)
             return index, record
     return None, None
@@ -174,7 +180,7 @@ def recent_expense_rows(chat_id, limit=10, include_all=False):
     result = []
     for index in range(len(rows), 1, -1):
         row = rows[index - 1]
-        if include_all or (len(row) > CHAT_ID_INDEX and row[CHAT_ID_INDEX] == chat_id):
+        if include_all or (len(row) > CHAT_ID_INDEX and chat_id_matches(row[CHAT_ID_INDEX], chat_id)):
             result.append({"row_number": index, "record": _record_from_row(row)})
             if len(result) >= limit:
                 break
@@ -197,7 +203,7 @@ def update_expense_status(row_number, chat_id, status, allow_any=False):
     current = get_expense_row(row_number)
     if not current:
         return False
-    if not allow_any and str(current.get("Chat ID", "")) != str(chat_id):
+    if not allow_any and not chat_id_matches(current.get("Chat ID", ""), chat_id):
         return False
     worksheet = get_expenses_sheet()
     worksheet.update_cell(int(row_number), STATUS_INDEX + 1, status)
@@ -215,7 +221,7 @@ def update_expense_fields(row_number, chat_id, fields, allow_any=False):
     current = get_expense_row(row_number)
     if not current:
         return False, None
-    if not allow_any and str(current.get("Chat ID", "")) != str(chat_id):
+    if not allow_any and not chat_id_matches(current.get("Chat ID", ""), chat_id):
         return False, None
 
     worksheet = get_expenses_sheet()

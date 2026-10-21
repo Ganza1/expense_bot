@@ -86,6 +86,13 @@ def text_from_message(message):
     return (message or {}).get("text", "").strip()
 
 
+def telegram_owner_value(chat_id, telegram_user=None):
+    username = str((telegram_user or {}).get("username") or "").strip().lstrip("@")
+    if username:
+        return f"@{username} ({chat_id})"
+    return str(chat_id)
+
+
 def parse_amount(text):
     try:
         value = Decimal(text.replace(" ", "").replace(",", "."))
@@ -108,8 +115,9 @@ def row_number_from_append_result(result):
     return int(digits) if digits else None
 
 
-def start_add_flow(chat_id, telegram):
-    sheets.set_state(chat_id, STATE_PAYMENT_TYPE, {})
+def start_add_flow(chat_id, telegram, telegram_user=None):
+    data = {"telegram_username": (telegram_user or {}).get("username", "")}
+    sheets.set_state(chat_id, STATE_PAYMENT_TYPE, data)
     telegram.send_message(chat_id, "💳 Выберите способ оплаты:", reply_markup=payment_keyboard())
 
 
@@ -259,7 +267,7 @@ def build_expense(data, chat_id):
         "Тип оплаты": data.get("payment_type", ""),
         "Криптовалюта": data.get("crypto_currency", ""),
         "Статус": data.get("status", ""),
-        "Chat ID": str(chat_id),
+        "Chat ID": telegram_owner_value(chat_id, {"username": data.get("telegram_username", "")}),
         "Timezone": tz_name,
         "Кошелек": data.get("crypto_wallet", ""),
         "Валюта": data.get("currency", CURRENCY_RUB) if data.get("payment_type") != PAYMENT_CRYPTO else "",
@@ -303,7 +311,7 @@ def notify_admin_about_expense(telegram, expense, row_number=None):
             print(f"Admin notification failed for {admin_id}: {exc}", flush=True)
 
 
-def handle_command(chat_id, command, telegram):
+def handle_command(chat_id, command, telegram, telegram_user=None):
     tz_name = env_timezone()
     if command == "/start":
         send_start(chat_id, telegram)
@@ -318,7 +326,7 @@ def handle_command(chat_id, command, telegram):
     elif command == "/help":
         send_help(chat_id, telegram)
     elif command == "/add":
-        start_add_flow(chat_id, telegram)
+        start_add_flow(chat_id, telegram, telegram_user=telegram_user)
     elif command == "/today":
         rows = sheets.all_expenses()
         start, end = reports.today_range(tz_name)
@@ -367,7 +375,7 @@ def handle_message(message, telegram):
     chat_id = message["chat"]["id"]
     text = text_from_message(message)
     if text.startswith("/"):
-        handle_command(chat_id, text.split()[0], telegram)
+        handle_command(chat_id, text.split()[0], telegram, telegram_user=message.get("from"))
         return
 
     menu_commands = {
@@ -384,7 +392,7 @@ def handle_message(message, telegram):
         return
     if text in menu_commands:
         sheets.clear_state(chat_id)
-        handle_command(chat_id, menu_commands[text], telegram)
+        handle_command(chat_id, menu_commands[text], telegram, telegram_user=message.get("from"))
         return
 
     current = sheets.get_state(chat_id)
@@ -475,7 +483,7 @@ def handle_callback(callback, telegram):
     if data_value.startswith("cmd:"):
         command = data_value.split(":", 1)[1]
         if command == "add":
-            start_add_flow(chat_id, telegram)
+            start_add_flow(chat_id, telegram, telegram_user=callback.get("from"))
         elif command == "history":
             telegram.send_message(chat_id, reports.history_text(sheets.all_expenses(), chat_id, include_all=is_admin_chat(chat_id)))
         elif command == "help":
@@ -566,7 +574,7 @@ def handle_callback(callback, telegram):
     if data_value.startswith("delete_row:"):
         row_number = data_value.split(":", 1)[1]
         record = sheets.get_expense_row(row_number)
-        if not record or (not is_admin_chat(chat_id) and str(record.get("Chat ID", "")) != str(chat_id)):
+        if not record or (not is_admin_chat(chat_id) and not sheets.chat_id_matches(record.get("Chat ID", ""), chat_id)):
             sheets.clear_state(chat_id)
             telegram.edit_message_text(chat_id, message_id, "⚠️ Не удалось найти эту операцию или нет доступа.")
             return
@@ -582,7 +590,7 @@ def handle_callback(callback, telegram):
     if data_value.startswith("edit_row:"):
         row_number = data_value.split(":", 1)[1]
         record = sheets.get_expense_row(row_number)
-        if not record or (not is_admin_chat(chat_id) and str(record.get("Chat ID", "")) != str(chat_id)):
+        if not record or (not is_admin_chat(chat_id) and not sheets.chat_id_matches(record.get("Chat ID", ""), chat_id)):
             sheets.clear_state(chat_id)
             telegram.edit_message_text(chat_id, message_id, "⚠️ Не удалось найти эту операцию или нет доступа.")
             return
@@ -671,7 +679,7 @@ def handle_callback(callback, telegram):
     if data_value.startswith("status_row:"):
         row_number = data_value.split(":", 1)[1]
         record = sheets.get_expense_row(row_number)
-        if not record or (not is_admin_chat(chat_id) and str(record.get("Chat ID", "")) != str(chat_id)):
+        if not record or (not is_admin_chat(chat_id) and not sheets.chat_id_matches(record.get("Chat ID", ""), chat_id)):
             sheets.clear_state(chat_id)
             telegram.edit_message_text(chat_id, message_id, "⚠️ Не удалось найти эту операцию.")
             return
@@ -741,7 +749,7 @@ def handle_callback(callback, telegram):
         elif is_admin_chat(chat_id):
             sheets.clear_state(chat_id)
             telegram.edit_message_text(chat_id, message_id, "⚠️ Не удалось удалить запись: она уже изменена или удалена.")
-        elif str(record.get("Chat ID", "")) != str(chat_id):
+        elif not sheets.chat_id_matches(record.get("Chat ID", ""), chat_id):
             sheets.clear_state(chat_id)
             telegram.edit_message_text(chat_id, message_id, "⛔ Нельзя удалить чужую операцию.")
         elif request_delete_approval(telegram, chat_id, row_number, record):
@@ -764,7 +772,7 @@ def handle_callback(callback, telegram):
         if (
             requester_state != STATE_DELETE_PENDING
             or str(row_number) != str(requested_row)
-            or str(record.get("Chat ID", "")) != str(requester_chat_id)
+            or not sheets.chat_id_matches(record.get("Chat ID", ""), requester_chat_id)
         ):
             telegram.edit_message_text(chat_id, message_id, "⚠️ Запрос уже обработан или устарел.")
             return
