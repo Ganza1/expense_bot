@@ -84,7 +84,7 @@ def status_records_keyboard(items):
         record = item["record"]
         date_time = record.get("Дата и время", "")
         amount = record.get("Сумма", "")
-        currency = record.get("Валюта", "") or "RUB"
+        currency = record.get("Валюта", "") or record.get("Криптовалюта", "") or "RUB"
         description = record.get("Описание", "")
         status = record.get("Статус", "") or "без статуса"
         owner = record.get("Chat ID", "")
