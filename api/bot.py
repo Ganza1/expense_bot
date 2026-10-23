@@ -192,9 +192,11 @@ def expense_change_notification_text(action, record, changed_by_chat_id, row_num
     return "\n".join(lines)
 
 
-def notify_admin_about_change(telegram, action, record, changed_by_chat_id, row_number=None):
+def notify_admin_about_change(telegram, action, record, changed_by_chat_id, row_number=None, exclude_chat_id=None):
     text = expense_change_notification_text(action, record, changed_by_chat_id, row_number=row_number)
     for admin_id in admin_chat_ids():
+        if exclude_chat_id is not None and str(admin_id) == str(exclude_chat_id):
+            continue
         try:
             telegram.send_message(admin_id, text)
         except TelegramError as exc:
@@ -847,6 +849,14 @@ def handle_callback(callback, telegram):
             return
         decision = "✅ Выплата согласована" if status == "Оплачен" else "❌ В выплате отказано"
         telegram.edit_message_text(chat_id, message_id, decision + "\n" + operation_summary(updated))
+        notify_admin_about_change(
+            telegram,
+            decision + " одним из администраторов",
+            updated,
+            chat_id,
+            row_number=row_number,
+            exclude_chat_id=chat_id,
+        )
         notify_owner_about_status_change(telegram, updated, chat_id, row_number=row_number)
         return
 
