@@ -122,11 +122,13 @@ def edit_records_keyboard(items):
     return records_keyboard(items, "edit_row")
 
 
-def edit_field_keyboard(record):
+def edit_field_keyboard(record, allow_status=True):
     rows = [
         [button("💰 Сумма", "edit_field:amount"), button("📝 Описание", "edit_field:description")],
-        [button("🏷️ Категория", "edit_field:category"), button("🔄 Статус", "edit_field:status")],
+        [button("🏷️ Категория", "edit_field:category")],
     ]
+    if allow_status:
+        rows[1].append(button("🔄 Статус", "edit_field:status"))
     if record.get("Тип оплаты") != "Крипта":
         rows.append([button("💱 Валюта", "edit_field:currency")])
     else:
@@ -176,5 +178,14 @@ def delete_approval_keyboard(requester_chat_id, row_number):
         [
             [button("✅ Разрешить удаление", f"delete_approve:{requester_chat_id}:{row_number}")],
             [button("❌ Отказать", f"delete_reject:{requester_chat_id}:{row_number}")],
+        ]
+    )
+
+
+def payment_approval_keyboard(row_number, approval_reference):
+    return inline_keyboard(
+        [
+            [button("✅ Да, согласовать", f"payment_approve:{row_number}:{approval_reference}")],
+            [button("❌ Нет, отказать", f"payment_reject:{row_number}:{approval_reference}")],
         ]
     )

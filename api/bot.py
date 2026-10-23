@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import re
@@ -17,6 +18,7 @@ from keyboards.inline import (
     edit_field_keyboard,
     edit_records_keyboard,
     main_menu_keyboard,
+    payment_approval_keyboard,
     payment_keyboard,
     report_keyboard,
     saved_keyboard,
@@ -127,16 +129,17 @@ def start_add_flow(chat_id, telegram, telegram_user=None):
 
 
 def start_status_update_flow(chat_id, telegram):
-    include_all = is_admin_chat(chat_id)
-    items = sheets.recent_expense_rows(chat_id, limit=20, include_all=include_all)
+    if not is_admin_chat(chat_id):
+        telegram.send_message(chat_id, "⛔ Согласовывать выплаты и менять их статус может только администратор.")
+        return
+    items = sheets.recent_expense_rows(chat_id, limit=20, include_all=True)
     if not items:
         telegram.send_message(chat_id, "📭 Нет операций для изменения статуса.")
         return
     sheets.clear_state(chat_id)
-    title = "🔄 Выберите операцию для смены статуса:" if not include_all else "🔄 Выберите операцию для смены статуса по всей таблице:"
     telegram.send_message(
         chat_id,
-        title,
+        "🔄 Выберите операцию для смены статуса по всей таблице:",
         reply_markup=status_records_keyboard(items),
     )
 
@@ -204,6 +207,16 @@ def expense_owner_chat_id(record):
         return value
     match = re.search(r"\((-?\d+)\)\s*$", value)
     return match.group(1) if match else None
+
+
+def expense_approval_reference(record):
+    identity = "|".join(
+        [
+            str((record or {}).get("Дата и время", "")).strip(),
+            str((record or {}).get("Chat ID", "")).strip(),
+        ]
+    )
+    return hashlib.sha256(identity.encode("utf-8")).hexdigest()[:12]
 
 
 def notify_owner_about_status_change(telegram, record, changed_by_chat_id, row_number=None):
@@ -335,11 +348,21 @@ def expense_notification_text(expense, row_number=None):
     return "\n".join(lines)
 
 
-def notify_admin_about_expense(telegram, expense, row_number=None):
+def notify_admin_about_expense(telegram, expense, row_number=None, approval_row_number=None):
     text = expense_notification_text(expense, row_number=row_number)
+    if approval_row_number:
+        text += "\n\n❓ Согласовать выплату?"
     for admin_id in admin_chat_ids():
         try:
-            telegram.send_message(admin_id, text)
+            telegram.send_message(
+                admin_id,
+                text,
+                reply_markup=(
+                    payment_approval_keyboard(approval_row_number, expense_approval_reference(expense))
+                    if approval_row_number
+                    else None
+                ),
+            )
         except TelegramError as exc:
             print(f"Admin notification failed for {admin_id}: {exc}", flush=True)
 
@@ -597,12 +620,25 @@ def handle_callback(callback, telegram):
     if data_value.startswith("category:") and state == STATE_CATEGORY:
         category = data_value.split(":", 1)[1]
         data["category"] = category
+        if not is_admin_chat(chat_id):
+            data["status"] = "На рассмотрении"
+            tz_name = env_timezone()
+            created_at = reports.now_in_timezone(tz_name)
+            data["created_at"] = created_at.strftime("%Y-%m-%d %H:%M:%S")
+            sheets.set_state(chat_id, STATE_CONFIRM, data)
+            telegram.edit_message_text(
+                chat_id,
+                message_id,
+                reports.format_expense_confirmation(data, tz_name, created_at),
+                reply_markup=confirm_keyboard(),
+            )
+            return
         sheets.set_state(chat_id, STATE_STATUS, data)
         telegram.edit_message_text(chat_id, message_id, "🔄 Выберите статус:", reply_markup=status_keyboard())
         return
 
     if data_value.startswith("status:") and state == STATE_STATUS:
-        status = data_value.split(":", 1)[1]
+        status = data_value.split(":", 1)[1] if is_admin_chat(chat_id) else "На рассмотрении"
         data["status"] = status
         tz_name = env_timezone()
         created_at = reports.now_in_timezone(tz_name)
@@ -645,7 +681,7 @@ def handle_callback(callback, telegram):
             chat_id,
             message_id,
             "✏️ Что изменить?\n" + operation_summary(record),
-            reply_markup=edit_field_keyboard(record),
+            reply_markup=edit_field_keyboard(record, allow_status=is_admin_chat(chat_id)),
         )
         return
 
@@ -669,6 +705,9 @@ def handle_callback(callback, telegram):
             telegram.edit_message_text(chat_id, message_id, "🏷️ Выберите новую категорию:", reply_markup=category_keyboard())
             return
         if field == "status":
+            if not is_admin_chat(chat_id):
+                telegram.edit_message_text(chat_id, message_id, "⛔ Менять статус может только администратор.")
+                return
             data["field"] = field
             sheets.set_state(chat_id, STATE_EDIT_FIELD, data)
             telegram.edit_message_text(chat_id, message_id, "🔄 Выберите новый статус:", reply_markup=status_keyboard(prefix="edit_status"))
@@ -711,6 +750,10 @@ def handle_callback(callback, telegram):
         return
 
     if data_value.startswith("edit_status:") and state == STATE_EDIT_FIELD and data.get("field") == "status":
+        if not is_admin_chat(chat_id):
+            sheets.clear_state(chat_id)
+            telegram.edit_message_text(chat_id, message_id, "⛔ Менять статус может только администратор.")
+            return
         status = data_value.split(":", 1)[1]
         row_number = data.get("row_number")
         ok, updated = sheets.update_expense_fields(int(row_number), chat_id, {"Статус": status}, allow_any=is_admin_chat(chat_id)) if row_number else (False, None)
@@ -724,6 +767,10 @@ def handle_callback(callback, telegram):
         return
 
     if data_value.startswith("status_row:"):
+        if not is_admin_chat(chat_id):
+            sheets.clear_state(chat_id)
+            telegram.edit_message_text(chat_id, message_id, "⛔ Менять статус может только администратор.")
+            return
         row_number = data_value.split(":", 1)[1]
         record = sheets.get_expense_row(row_number)
         if not record or (not is_admin_chat(chat_id) and not sheets.chat_id_matches(record.get("Chat ID", ""), chat_id)):
@@ -743,6 +790,10 @@ def handle_callback(callback, telegram):
         return
 
     if data_value.startswith("status_update:") and state == STATE_STATUS_UPDATE:
+        if not is_admin_chat(chat_id):
+            sheets.clear_state(chat_id)
+            telegram.edit_message_text(chat_id, message_id, "⛔ Менять статус может только администратор.")
+            return
         status = data_value.split(":", 1)[1]
         row_number = data.get("row_number")
         ok, updated = sheets.update_expense_fields(
@@ -760,6 +811,45 @@ def handle_callback(callback, telegram):
             telegram.edit_message_text(chat_id, message_id, "⚠️ Не удалось обновить статус: операция не найдена.")
         return
 
+    if data_value.startswith("payment_approve:") or data_value.startswith("payment_reject:"):
+        if not is_admin_chat(chat_id):
+            telegram.edit_message_text(chat_id, message_id, "⛔ Согласование доступно только администратору.")
+            return
+        approval_parts = data_value.split(":", 2)
+        if len(approval_parts) != 3 or not approval_parts[1].isdigit():
+            telegram.edit_message_text(chat_id, message_id, "⚠️ Некорректный запрос согласования.")
+            return
+        action, row_number, expected_reference = approval_parts
+        record = sheets.get_expense_row(row_number)
+        if not record:
+            telegram.edit_message_text(chat_id, message_id, "⚠️ Выплата не найдена или удалена.")
+            return
+        if expense_approval_reference(record) != expected_reference:
+            telegram.edit_message_text(chat_id, message_id, "⚠️ Запрос устарел: строка платежа была изменена или перемещена.")
+            return
+        current_status = str(record.get("Статус", "")).strip()
+        if current_status != "На рассмотрении":
+            telegram.edit_message_text(
+                chat_id,
+                message_id,
+                f"ℹ️ Выплата уже обработана. Текущий статус: {current_status or 'без статуса'}.",
+            )
+            return
+        status = "Оплачен" if action == "payment_approve" else "Отказ"
+        ok, updated = sheets.update_expense_fields(
+            int(row_number),
+            chat_id,
+            {"Статус": status},
+            allow_any=True,
+        )
+        if not ok:
+            telegram.edit_message_text(chat_id, message_id, "⚠️ Не удалось сохранить решение.")
+            return
+        decision = "✅ Выплата согласована" if status == "Оплачен" else "❌ В выплате отказано"
+        telegram.edit_message_text(chat_id, message_id, decision + "\n" + operation_summary(updated))
+        notify_owner_about_status_change(telegram, updated, chat_id, row_number=row_number)
+        return
+
     if data_value == "confirm:save" and state == STATE_CONFIRM:
         expense = build_expense(data, chat_id)
         result = sheets.append_expense(expense)
@@ -775,8 +865,15 @@ def handle_callback(callback, telegram):
             sheets.set_state(chat_id, STATE_UNDO_SAVED, {"row_number": row_number, "expense": expense})
         else:
             sheets.clear_state(chat_id)
-        notify_admin_about_expense(telegram, expense, row_number=row_number)
-        telegram.edit_message_text(chat_id, message_id, "✅ Запись сохранена в лист Expenses.", reply_markup=saved_keyboard())
+        needs_approval = bool(row_number and not is_admin_chat(chat_id))
+        notify_admin_about_expense(
+            telegram,
+            expense,
+            row_number=row_number,
+            approval_row_number=row_number if needs_approval else None,
+        )
+        saved_text = "⏳ Запись сохранена и отправлена администратору на согласование." if needs_approval else "✅ Запись сохранена в лист Expenses."
+        telegram.edit_message_text(chat_id, message_id, saved_text, reply_markup=saved_keyboard())
         return
 
     if data_value == "undo:saved" and state == STATE_UNDO_SAVED:
