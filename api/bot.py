@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import traceback
 from decimal import Decimal, InvalidOperation
 from datetime import datetime
@@ -195,6 +196,34 @@ def notify_admin_about_change(telegram, action, record, changed_by_chat_id, row_
             telegram.send_message(admin_id, text)
         except TelegramError as exc:
             print(f"Admin change notification failed for {admin_id}: {exc}", flush=True)
+
+
+def expense_owner_chat_id(record):
+    value = str((record or {}).get("Chat ID", "")).strip()
+    if re.fullmatch(r"-?\d+", value):
+        return value
+    match = re.search(r"\((-?\d+)\)\s*$", value)
+    return match.group(1) if match else None
+
+
+def notify_owner_about_status_change(telegram, record, changed_by_chat_id, row_number=None):
+    owner_chat_id = expense_owner_chat_id(record)
+    if not owner_chat_id or owner_chat_id == str(changed_by_chat_id):
+        return
+
+    lines = ["🔄 Статус вашей оплаты изменен"]
+    if row_number:
+        lines.append(f"📌 Строка: {row_number}")
+    lines.extend(
+        [
+            f"✅ Новый статус: {record.get('Статус', '') or 'без статуса'}",
+            operation_summary(record),
+        ]
+    )
+    try:
+        telegram.send_message(owner_chat_id, "\n".join(lines))
+    except TelegramError as exc:
+        print(f"Owner status notification failed for {owner_chat_id}: {exc}", flush=True)
 
 
 def request_delete_approval(telegram, requester_chat_id, row_number, record):
@@ -688,6 +717,7 @@ def handle_callback(callback, telegram):
         sheets.clear_state(chat_id)
         if ok:
             notify_admin_about_change(telegram, "✏️ Оплата изменена", updated, chat_id, row_number=row_number)
+            notify_owner_about_status_change(telegram, updated, chat_id, row_number=row_number)
             telegram.edit_message_text(chat_id, message_id, f"✅ Статус изменен: {status}\n" + operation_summary(updated))
         else:
             telegram.edit_message_text(chat_id, message_id, "⚠️ Не удалось изменить статус.")
@@ -715,11 +745,18 @@ def handle_callback(callback, telegram):
     if data_value.startswith("status_update:") and state == STATE_STATUS_UPDATE:
         status = data_value.split(":", 1)[1]
         row_number = data.get("row_number")
-        if row_number and sheets.update_expense_status(int(row_number), chat_id, status, allow_any=is_admin_chat(chat_id)):
-            sheets.clear_state(chat_id)
+        ok, updated = sheets.update_expense_fields(
+            int(row_number),
+            chat_id,
+            {"Статус": status},
+            allow_any=is_admin_chat(chat_id),
+        ) if row_number else (False, None)
+        sheets.clear_state(chat_id)
+        if ok:
+            notify_admin_about_change(telegram, "🔄 Статус оплаты изменен", updated, chat_id, row_number=row_number)
+            notify_owner_about_status_change(telegram, updated, chat_id, row_number=row_number)
             telegram.edit_message_text(chat_id, message_id, f"✅ Статус обновлен: {status}")
         else:
-            sheets.clear_state(chat_id)
             telegram.edit_message_text(chat_id, message_id, "⚠️ Не удалось обновить статус: операция не найдена.")
         return
 
