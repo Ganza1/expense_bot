@@ -71,6 +71,7 @@ def status_keyboard(prefix="status"):
     emoji = {
         "Оплачен": "✅",
         "На рассмотрении": "⏳",
+        "Согласован в оплату": "👍",
         "Отказ": "❌",
     }
     rows = [[button(f"{emoji.get(status, '')} {status}".strip(), f"{prefix}:{status}")] for status in STATUSES]

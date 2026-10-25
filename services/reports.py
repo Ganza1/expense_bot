@@ -9,6 +9,7 @@ from states.constants import CURRENCY_RUB, FIAT_CURRENCIES, PAYMENT_GROUPS, STAT
 STATUS_EMOJI = {
     "Оплачен": "✅",
     "На рассмотрении": "⏳",
+    "Согласован в оплату": "👍",
     "Отказ": "❌",
     "Без статуса": "▫️",
 }

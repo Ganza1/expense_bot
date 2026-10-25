@@ -837,7 +837,8 @@ def handle_callback(callback, telegram):
                 f"ℹ️ Выплата уже обработана. Текущий статус: {current_status or 'без статуса'}.",
             )
             return
-        status = "Оплачен" if action == "payment_approve" else "Отказ"
+        approved = action == "payment_approve"
+        status = "Согласован в оплату" if approved else "Отказ"
         ok, updated = sheets.update_expense_fields(
             int(row_number),
             chat_id,
@@ -847,7 +848,7 @@ def handle_callback(callback, telegram):
         if not ok:
             telegram.edit_message_text(chat_id, message_id, "⚠️ Не удалось сохранить решение.")
             return
-        decision = "✅ Выплата согласована" if status == "Оплачен" else "❌ В выплате отказано"
+        decision = "👍 Выплата согласована в оплату" if approved else "❌ В выплате отказано"
         telegram.edit_message_text(chat_id, message_id, decision + "\n" + operation_summary(updated))
         notify_admin_about_change(
             telegram,
